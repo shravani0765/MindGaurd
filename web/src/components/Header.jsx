@@ -13,10 +13,17 @@ import {
   Music,
   Trees,
   Compass,
+  LogOut,
 } from 'lucide-react';
 import { ambianceEngine } from '../services/audioAmbiance';
 
-export default function Header({ onOpenDashboard, burnoutScore = 24, autoInterventionActive: _autoInterventionActive = false }) {
+export default function Header({
+  onOpenDashboard,
+  burnoutScore = 24,
+  userName = 'You',
+  onLogout,
+  autoInterventionActive: _autoInterventionActive = false,
+}) {
   const [activeTrack, setActiveTrack] = useState(null);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
@@ -55,6 +62,7 @@ export default function Header({ onOpenDashboard, burnoutScore = 24, autoInterve
 
   const status = getShieldStatus(burnoutScore);
   const currentTrackObj = tracks.find((t) => t.id === activeTrack);
+  const statusTone = burnoutScore < 40 ? 'low' : burnoutScore < 70 ? 'moderate' : 'high';
 
   return (
     <header className="app-header">
@@ -65,9 +73,7 @@ export default function Header({ onOpenDashboard, burnoutScore = 24, autoInterve
         <div>
           <div className="app-header__brand-row">
             <h1>MindGuard</h1>
-            <span className="app-header__badge">
-              AI 2.0
-            </span>
+            <span className="app-header__badge">{userName}</span>
           </div>
           <p>Calm check-ins for busy days</p>
         </div>
@@ -76,15 +82,14 @@ export default function Header({ onOpenDashboard, burnoutScore = 24, autoInterve
       <button
         type="button"
         onClick={onOpenDashboard}
-        className="app-header__status"
-        style={{ borderColor: `${status.color}35`, background: status.bg }}
+        className={`app-header__status app-header__status--${statusTone}`}
         title="Click to view Burnout Insights"
       >
-        <Heart size={14} color={status.color} />
-        <span style={{ color: status.color }}>
+        <Heart size={14} className="app-header__status-icon" />
+        <span className="app-header__status-copy">
           {status.label} ({burnoutScore}%)
         </span>
-        <Activity size={13} color="var(--text-muted)" />
+        <Activity size={13} className="app-header__status-trend" />
       </button>
 
       <div className="app-header__actions">
@@ -95,7 +100,7 @@ export default function Header({ onOpenDashboard, burnoutScore = 24, autoInterve
         >
           {activeTrack ? <Volume2 size={15} color="var(--sage-green)" /> : <VolumeX size={15} />}
           <span>{currentTrackObj ? currentTrackObj.label : 'Soundscapes'}</span>
-          <ChevronDown size={14} style={{ opacity: 0.7 }} />
+          <ChevronDown size={14} className="app-header__chevron" />
         </button>
 
         {isMenuOpen && (
@@ -114,16 +119,16 @@ export default function Header({ onOpenDashboard, burnoutScore = 24, autoInterve
                   className={`app-header__menu-item ${isSelected ? 'selected' : ''}`}
                 >
                   <Icon size={16} color={isSelected ? 'var(--sage-green)' : 'var(--calm-blue)'} />
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: '0.84rem', fontWeight: isSelected ? '600' : '500' }}>
+                  <div className="app-header__menu-copy">
+                    <div className={`app-header__menu-name ${isSelected ? 'selected' : ''}`}>
                       {t.label}
                     </div>
-                    <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                    <div className="app-header__menu-desc">
                       {t.desc}
                     </div>
                   </div>
                   {isSelected && (
-                    <span style={{ fontSize: '0.7rem', color: 'var(--sage-green)', fontWeight: '600' }}>
+                    <span className="app-header__menu-state">
                       Active
                     </span>
                   )}
@@ -142,9 +147,14 @@ export default function Header({ onOpenDashboard, burnoutScore = 24, autoInterve
           </div>
         )}
 
-        <button onClick={onOpenDashboard} className="btn-primary app-header__cta">
+        <button type="button" onClick={onOpenDashboard} className="btn-primary app-header__cta">
           <Sparkles size={14} />
           Burnout Radar
+        </button>
+
+        <button type="button" onClick={onLogout} className="btn-ghost app-header__logout">
+          <LogOut size={14} />
+          Sign out
         </button>
       </div>
     </header>

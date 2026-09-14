@@ -4,7 +4,7 @@ import { Send, Sparkles, User, Bot, HeartPulse, ShieldCheck } from 'lucide-react
 import { apiClient } from '../services/api';
 import { buildComfortResponse } from '../services/wellnessIntelligence';
 
-export default function ChatInterface({ userId = 'user_demo_01', onMoodLogged }) {
+export default function ChatInterface({ userId = null, onMoodLogged }) {
   const [messages, setMessages] = useState([
     {
       id: 1,

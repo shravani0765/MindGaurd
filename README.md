@@ -1,6 +1,6 @@
 # MindGuard
 
-MindGuard is a multimodal mental wellness concept app with:
+MindGuard is a multimodal mental wellness app with:
 
 - a React web client in `web/`
 - an Expo mobile client in `mobile/`
@@ -16,7 +16,7 @@ This repo originally had a visually ambitious frontend, but the backend contract
 - deployment was still wired to the old Node service
 - the API layer had no easy local Python setup for future AI or data work
 
-This update adds a Django backend foundation that makes the project smoother to extend.
+This update turns the project into a cleaner full-stack foundation that is easier to ship and extend.
 
 ## New Django backend
 
@@ -26,6 +26,10 @@ The Django API now includes:
 - `POST /api/auth/register`
 - `GET /api/auth/verify`
 - `POST /api/auth/login`
+- `POST /api/auth/logout`
+- `GET /api/auth/me`
+- `POST /api/auth/password-reset/request`
+- `POST /api/auth/password-reset/confirm`
 - `POST /api/interactions/text`
 - `POST /api/interactions/voice`
 - `POST /api/interactions/video`
@@ -35,16 +39,33 @@ The Django API now includes:
 - `POST /api/notifications/register-token`
 - `POST /api/notifications/send-alert`
 
-The backend uses SQLite by default so it runs locally without extra infrastructure.
+The backend now supports:
+
+- SQLite by default for easy local setup
+- PostgreSQL in production through `DATABASE_URL`
+- optional OpenAI-backed text inference when `OPENAI_API_KEY` is configured
+- signed auth tokens with real per-user sessions instead of a shared demo user
 
 ## Web improvements
 
 The web app now:
 
 - points to Django by default in local development
+- supports real sign up, email verification, sign in, sign out, and password reset flows
+- uses authenticated sessions instead of a shared demo identity
 - loads real mood history and burnout summaries from the backend
-- has a clearer dashboard shell with a recovery snapshot, action cards, and a more polished responsive layout
-- keeps the original voice, video, and multimodal concepts while giving them a more stable data source
+- has a cleaner white-and-teal dashboard and dedicated auth screens
+- splits the top-level UI into smaller components for easier maintenance
+
+## Mobile improvements
+
+The Expo app is no longer a starter screen. It now includes:
+
+- login and sign-up against the Django API
+- burnout snapshot loading
+- recent mood history
+- quick authenticated text check-ins
+- a configurable API URL field for local development
 
 ## Run locally
 
@@ -77,21 +98,37 @@ If needed, set:
 VITE_API_URL=http://127.0.0.1:8000/api
 ```
 
+### 3. Mobile app
+
+In another terminal:
+
+```bash
+cd mobile
+npm install
+npm start
+```
+
+Important:
+
+- iPhone or Android simulators can usually use your machine-local API more easily than a physical phone.
+- if you test on a physical phone, `127.0.0.1` points to the phone itself, not your laptop, so you must replace the API URL with your laptop's local network IP.
+
 ## Verified locally
 
 - `python manage.py test`
 - `npm run build`
+- `npm run lint`
 
-## Suggested next updates
+## Still worth doing later
 
-These are the highest-value improvements still worth doing next:
+These are the highest-value follow-ups after this foundation:
 
-1. Replace the placeholder mood-analysis heuristics with a real ML or LLM-backed inference layer.
-2. Move the frontend from a shared demo user id to real authenticated sessions.
-3. Upgrade the mobile app from the Expo starter screen into a real MindGuard companion using the same Django API.
-4. Add persistent PostgreSQL for production instead of SQLite.
-5. Add stronger API tests around auth failures, notification flows, and edge-case data validation.
-6. Split large inline-styled React components into smaller shared UI primitives for maintainability.
+1. Add refresh-token rotation and server-side token revocation rather than simple signed tokens only.
+2. Move the multimodal fusion itself into the Django API so combo mode is fully persisted server-side.
+3. Add a proper PostgreSQL instance on Render or Neon and wire `DATABASE_URL` in production.
+4. Replace the client-side webcam heuristics with a real vision model or remove pseudo-precision metrics that may overpromise.
+5. Add end-to-end tests for the auth UI and protected API flows.
+6. Break the remaining large frontend components into shared card, chip, and status primitives.
 
 ## Deployment notes
 
@@ -99,7 +136,3 @@ These are the highest-value improvements still worth doing next:
 - `render.yaml` targets the Django API service and installs from `django_backend/requirements.txt`.
 - `web/vercel.json` remains available if you ever deploy the `web/` folder by itself.
 - For Vercel, set `VITE_API_URL` to your deployed Django API URL when the backend is live.
-
-## Important note about GitHub updates
-
-The repository was cloned locally for this work. I made the changes in the local clone, but pushing them back to GitHub still needs your authenticated `git push` step or permission to use your Git credentials.

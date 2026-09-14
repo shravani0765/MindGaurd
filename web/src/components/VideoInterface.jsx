@@ -3,7 +3,7 @@ import React, { useRef, useState, useEffect } from 'react';
 import { Video, VideoOff, Camera, HeartPulse, ShieldCheck } from 'lucide-react';
 import { apiClient } from '../services/api';
 
-export default function VideoInterface({ isCamOn, onToggleCam, onMoodLogged, userId = 'user_demo_01' }) {
+export default function VideoInterface({ isCamOn, onToggleCam, onMoodLogged, userId = null }) {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const [stream, setStream] = useState(null);

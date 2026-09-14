@@ -26,7 +26,7 @@ export default function ComboInterface({
   showTranscript: _showTranscript,
   onMoodLogged,
   onOpenMeditation,
-  userId = 'user_demo_01',
+  userId = null,
 }) {
   const videoRef = useRef(null);
   const [stream, setStream] = useState(null);
@@ -147,34 +147,28 @@ export default function ComboInterface({
     speechService.stopListening();
 
     try {
-      // 1. Synthesize all 3 modalities: Spoken Text + Live Face Analysis + Vocal tone
+      const textResponse = await apiClient.sendTextInteraction(userId, spokenText);
+      const backendEmotion = textResponse.moodLog?.emotion || telemetry.emotion;
+
+      // Use the authenticated backend result as the primary emotional baseline,
+      // then layer facial telemetry on top for a gentler combo-mode response.
       const aiResult = await aiReasoningEngine.synthesizeAndRespond(
         spokenText,
         telemetry,
-        telemetry.emotion
+        backendEmotion
       );
+      if (onMoodLogged) onMoodLogged(textResponse.moodLog);
 
-      // 2. Log to backend API
-      const logPayload = {
-        userId,
-        emotion: aiResult.fusedEmotion,
-        sourceMode: 'combo',
-        timestamp: new Date().toISOString(),
-        details: { confidence: aiResult.confidence, tension: telemetry.tension, spokenText },
-      };
-      if (onMoodLogged) onMoodLogged(logPayload);
-      apiClient.sendTextInteraction(userId, spokenText);
-
-      // 3. Update UI states with deep empathetic reply
+      // 2. Update UI states with a multimodal response
       setLastAIResponse(aiResult.response);
       setSomaticAdvice(aiResult.somaticAdvice);
 
-      // 4. If high stress or burnout is detected, auto-trigger restorative rain/music
+      // 3. If high stress or burnout is detected, auto-trigger restorative rain/music
       if (aiResult.fusedEmotion === 'stressed' || telemetry.tension > 60) {
         ambianceEngine.triggerBurnoutIntervention();
       }
 
-      // 5. Speak reply with warm voice
+      // 4. Speak reply with warm voice
       setOrbState('speaking');
       speechService.speak(aiResult.response, () => {
         if (isMicOn) {
@@ -306,8 +300,7 @@ export default function ComboInterface({
           <button
             key={i}
             onClick={() => handlePromptClick(prompt)}
-            className="btn-ghost"
-            style={{ fontSize: '0.78rem', padding: '8px 14px' }}
+            className="btn-ghost chip-cloud__button"
           >
             <Sparkles size={12} color="var(--calm-blue)" />
             {prompt}

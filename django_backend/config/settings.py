@@ -1,6 +1,8 @@
 import os
 from pathlib import Path
 
+import dj_database_url
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 
@@ -74,8 +76,15 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "config.wsgi.application"
 
+DATABASE_URL = env_str("DATABASE_URL", "")
 DATABASES = {
-    "default": {
+    "default": dj_database_url.parse(
+        DATABASE_URL,
+        conn_max_age=env_int("DATABASE_CONN_MAX_AGE", 600),
+        ssl_require=env_bool("DATABASE_SSL_REQUIRE", not DEBUG),
+    )
+    if DATABASE_URL
+    else {
         "ENGINE": "django.db.backends.sqlite3",
         "NAME": BASE_DIR / "db.sqlite3",
     }
@@ -106,6 +115,13 @@ STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 
 FRONTEND_URL = env_str("FRONTEND_URL", "http://127.0.0.1:5173")
+AUTH_TOKEN_TTL_SECONDS = env_int("AUTH_TOKEN_TTL_SECONDS", 60 * 60 * 12)
+REFRESH_TOKEN_TTL_SECONDS = env_int("REFRESH_TOKEN_TTL_SECONDS", 60 * 60 * 24 * 14)
+PASSWORD_RESET_TOKEN_TTL_SECONDS = env_int("PASSWORD_RESET_TOKEN_TTL_SECONDS", 60 * 60 * 2)
+OPENAI_API_KEY = env_str("OPENAI_API_KEY", "")
+OPENAI_BASE_URL = env_str("OPENAI_BASE_URL", "")
+OPENAI_MODEL = env_str("OPENAI_MODEL", "gpt-5-mini")
+OPENAI_TIMEOUT_SECONDS = env_int("OPENAI_TIMEOUT_SECONDS", 12)
 
 CORS_ALLOWED_ORIGINS = [
     origin.strip()

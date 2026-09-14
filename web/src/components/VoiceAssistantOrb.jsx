@@ -10,7 +10,7 @@ export default function VoiceAssistantOrb({
   onToggleMic,
   showTranscript,
   onMoodLogged,
-  userId = 'user_demo_01',
+  userId = null,
 }) {
   const [orbState, setOrbState] = useState('idle');
   const [transcript, setTranscript] = useState('');

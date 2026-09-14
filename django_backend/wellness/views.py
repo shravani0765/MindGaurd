@@ -4,17 +4,20 @@ from django.conf import settings
 from django.contrib.auth.hashers import check_password, make_password
 from django.core import signing
 from django.core.mail import send_mail
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 
-from .models import MindGuardUser, MoodLog
+from .models import MindGuardUser
 from .serializers import (
     AuthLoginSerializer,
     AuthRegisterSerializer,
     MoodEntrySerializer,
     MoodLogSerializer,
     NotificationSerializer,
+    PasswordResetConfirmSerializer,
+    PasswordResetRequestSerializer,
     TokenRegistrationSerializer,
 )
 from .services import (
@@ -24,7 +27,13 @@ from .services import (
     create_mood_log,
     format_burnout_snapshot,
     get_user_logs,
+    serialize_user,
 )
+
+AUTH_SALT = "mindguard-auth"
+REFRESH_SALT = "mindguard-refresh"
+VERIFY_SALT = "mindguard-verify"
+RESET_SALT = "mindguard-reset"
 
 
 def _create_signed_token(payload, salt):
@@ -44,13 +53,84 @@ def _find_user_by_identifier(user_id):
         return MindGuardUser.objects.filter(email__iexact=user_id).first()
 
 
+def _extract_bearer_token(request):
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header.lower().startswith("bearer "):
+        return auth_header.split(" ", 1)[1].strip()
+    return ""
+
+
+def _authenticated_user(request):
+    token = _extract_bearer_token(request)
+    if not token:
+        return None
+
+    try:
+        payload = _load_signed_token(token, AUTH_SALT, settings.AUTH_TOKEN_TTL_SECONDS)
+    except signing.BadSignature:
+        return None
+
+    if payload.get("kind") != "access":
+        return None
+
+    return MindGuardUser.objects.filter(external_id=payload.get("uid")).first()
+
+
+def _issue_auth_payload(user):
+    auth_token = _create_signed_token({"uid": str(user.external_id), "kind": "access"}, AUTH_SALT)
+    refresh_token = _create_signed_token({"uid": str(user.external_id), "kind": "refresh"}, REFRESH_SALT)
+    return {
+        "authToken": auth_token,
+        "refreshToken": refresh_token,
+        "user": serialize_user(user),
+        "burnoutSnapshot": format_burnout_snapshot(get_user_logs(str(user.external_id))),
+    }
+
+
+def _resolve_actor(request, explicit_user_id=None, require_auth=False):
+    auth_user = _authenticated_user(request)
+    explicit_user = _find_user_by_identifier(explicit_user_id) if explicit_user_id else None
+
+    if require_auth and not auth_user:
+        return None, None, Response(
+            {"message": "Authentication required"},
+            status=status.HTTP_401_UNAUTHORIZED,
+        )
+
+    if auth_user and explicit_user_id:
+        allowed_ids = {str(auth_user.external_id), auth_user.email.lower()}
+        if str(explicit_user_id).lower() not in {item.lower() for item in allowed_ids}:
+            return None, None, Response(
+                {"message": "You can only access your own data"},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+    if auth_user:
+        return str(auth_user.external_id), auth_user, None
+    if explicit_user:
+        return str(explicit_user.external_id), explicit_user, None
+    if explicit_user_id:
+        return str(explicit_user_id), None, None
+    return None, None, None
+
+
+def _build_named_user(validated_data):
+    first_name = validated_data["firstName"].strip()
+    last_name = validated_data["lastName"].strip()
+    return {
+        "first_name": first_name,
+        "last_name": last_name,
+        "name": " ".join(part for part in [first_name, last_name] if part).strip(),
+    }
+
+
 @api_view(["GET"])
 def health_view(request):
     return Response(
         {
             "status": "ok",
             "service": "mindguard-django-api",
-            "version": "1.0.0",
+            "version": "1.1.0",
         }
     )
 
@@ -69,10 +149,10 @@ def register_view(request):
 
     user = MindGuardUser.objects.create(
         email=email,
-        name=serializer.validated_data.get("name", ""),
+        **_build_named_user(serializer.validated_data),
         password_hash=make_password(serializer.validated_data["password"]),
     )
-    token = _create_signed_token({"uid": str(user.external_id)}, "mindguard-verify")
+    token = _create_signed_token({"uid": str(user.external_id)}, VERIFY_SALT)
     verification_url = f"{settings.FRONTEND_URL.rstrip('/')}/verify-email?token={token}"
 
     send_mail(
@@ -87,7 +167,7 @@ def register_view(request):
         fail_silently=True,
     )
 
-    payload = {"message": "User created. Check email for verification link."}
+    payload = {"message": "Account created. Check your email for the verification link."}
     if settings.DEBUG:
         payload["verificationUrl"] = verification_url
     return Response(payload, status=status.HTTP_201_CREATED)
@@ -97,22 +177,22 @@ def register_view(request):
 def verify_view(request):
     token = request.query_params.get("token")
     if not token:
-        return Response("Invalid token", status=status.HTTP_400_BAD_REQUEST)
+        return Response({"message": "Invalid token"}, status=status.HTTP_400_BAD_REQUEST)
 
     try:
-        payload = _load_signed_token(token, "mindguard-verify", 60 * 60 * 24)
+        payload = _load_signed_token(token, VERIFY_SALT, 60 * 60 * 24)
     except signing.BadSignature:
-        return Response("Invalid or expired token", status=status.HTTP_400_BAD_REQUEST)
+        return Response({"message": "Invalid or expired token"}, status=status.HTTP_400_BAD_REQUEST)
 
     user = MindGuardUser.objects.filter(external_id=payload.get("uid")).first()
     if not user:
-        return Response("User not found", status=status.HTTP_404_NOT_FOUND)
+        return Response({"message": "User not found"}, status=status.HTTP_404_NOT_FOUND)
     if user.is_verified:
-        return Response("Email already verified")
+        return Response({"message": "Email already verified"})
 
     user.is_verified = True
     user.save(update_fields=["is_verified", "updated_at"])
-    return Response("Email successfully verified. You may now log in.")
+    return Response({"message": "Email successfully verified. You may now log in."})
 
 
 @api_view(["POST"])
@@ -132,74 +212,136 @@ def login_view(request):
             status=status.HTTP_403_FORBIDDEN,
         )
 
-    auth_token = _create_signed_token({"uid": str(user.external_id), "kind": "access"}, "mindguard-auth")
-    refresh_token = _create_signed_token({"uid": str(user.external_id), "kind": "refresh"}, "mindguard-refresh")
-
-    return Response(
-        {
-            "authToken": auth_token,
-            "refreshToken": refresh_token,
-            "user": {
-                "id": str(user.external_id),
-                "email": user.email,
-                "name": user.name,
-                "burnoutScore": user.burnout_score,
-            },
-        }
-    )
+    user.last_login_at = timezone.now()
+    user.save(update_fields=["last_login_at", "updated_at"])
+    return Response(_issue_auth_payload(user))
 
 
-def _interaction_response(user_id, source_mode, analysis):
-    user = _find_user_by_identifier(user_id)
+@api_view(["GET"])
+def me_view(request):
+    user = _authenticated_user(request)
+    if not user:
+        return Response({"message": "Authentication required"}, status=status.HTTP_401_UNAUTHORIZED)
+    return Response({"user": serialize_user(user), "burnoutSnapshot": format_burnout_snapshot(get_user_logs(str(user.external_id)))})
+
+
+@api_view(["POST"])
+def logout_view(request):
+    return Response({"message": "Logged out. Clear the local session on the client."})
+
+
+@api_view(["POST"])
+def password_reset_request_view(request):
+    serializer = PasswordResetRequestSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+
+    email = serializer.validated_data["email"].lower()
+    user = MindGuardUser.objects.filter(email=email).first()
+    payload = {"message": "If that email exists, a reset link has been sent."}
+
+    if user:
+        token = _create_signed_token({"uid": str(user.external_id)}, RESET_SALT)
+        reset_url = f"{settings.FRONTEND_URL.rstrip('/')}/reset-password?token={token}"
+        send_mail(
+            subject="Reset your MindGuard password",
+            message=(
+                "A password reset was requested for your MindGuard account.\n\n"
+                f"Reset it here: {reset_url}\n\n"
+                "If you did not request this change, you can ignore this email."
+            ),
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=[user.email],
+            fail_silently=True,
+        )
+        if settings.DEBUG:
+            payload["resetUrl"] = reset_url
+
+    return Response(payload)
+
+
+@api_view(["POST"])
+def password_reset_confirm_view(request):
+    serializer = PasswordResetConfirmSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+
+    try:
+        payload = _load_signed_token(
+            serializer.validated_data["token"],
+            RESET_SALT,
+            settings.PASSWORD_RESET_TOKEN_TTL_SECONDS,
+        )
+    except signing.BadSignature:
+        return Response({"message": "Invalid or expired token"}, status=status.HTTP_400_BAD_REQUEST)
+
+    user = MindGuardUser.objects.filter(external_id=payload.get("uid")).first()
+    if not user:
+        return Response({"message": "User not found"}, status=status.HTTP_404_NOT_FOUND)
+
+    user.password_hash = make_password(serializer.validated_data["password"])
+    user.save(update_fields=["password_hash", "updated_at"])
+    return Response({"message": "Password updated. You can now log in."})
+
+
+def _interaction_response(user_id, source_mode, analysis, user=None):
     mood_log = create_mood_log(
         user_id=user_id,
         source_mode=source_mode,
         analysis=analysis,
         user=user,
     )
-    return mood_log
+    snapshot = format_burnout_snapshot(get_user_logs(user_id))
+    return mood_log, snapshot
 
 
 @api_view(["POST"])
 def text_interaction_view(request):
-    user_id = request.data.get("userId")
+    user_id, user, auth_error = _resolve_actor(request, request.data.get("userId"), require_auth=True)
+    if auth_error:
+        return auth_error
+
     text = request.data.get("text", "")
-    if not user_id or not text:
+    if not text:
         return Response(
-            {"message": "userId and text required"},
+            {"message": "text required"},
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    mood_log = _interaction_response(user_id, "text", analyze_text(text))
-    return Response({"message": "Text processed", "moodLog": MoodLogSerializer(mood_log).data})
+    mood_log, snapshot = _interaction_response(user_id, "text", analyze_text(text), user=user)
+    return Response({"message": "Text processed", "moodLog": MoodLogSerializer(mood_log).data, "burnoutRisk": snapshot})
 
 
 @api_view(["POST"])
 def voice_interaction_view(request):
-    user_id = request.data.get("userId")
+    user_id, user, auth_error = _resolve_actor(request, request.data.get("userId"), require_auth=True)
+    if auth_error:
+        return auth_error
+
     audio_base64 = request.data.get("audioBase64")
-    if not user_id or not audio_base64:
+    if not audio_base64:
         return Response(
-            {"message": "userId and audioBase64 required"},
+            {"message": "audioBase64 required"},
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    mood_log = _interaction_response(user_id, "voice", analyze_audio(audio_base64))
-    return Response({"message": "Voice processed", "moodLog": MoodLogSerializer(mood_log).data})
+    mood_log, snapshot = _interaction_response(user_id, "voice", analyze_audio(audio_base64), user=user)
+    return Response({"message": "Voice processed", "moodLog": MoodLogSerializer(mood_log).data, "burnoutRisk": snapshot})
 
 
 @api_view(["POST"])
 def video_interaction_view(request):
-    user_id = request.data.get("userId")
+    user_id, user, auth_error = _resolve_actor(request, request.data.get("userId"), require_auth=True)
+    if auth_error:
+        return auth_error
+
     video_base64 = request.data.get("videoBase64")
-    if not user_id or not video_base64:
+    if not video_base64:
         return Response(
-            {"message": "userId and videoBase64 required"},
+            {"message": "videoBase64 required"},
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    mood_log = _interaction_response(user_id, "video", analyze_video(video_base64))
-    return Response({"message": "Video processed", "moodLog": MoodLogSerializer(mood_log).data})
+    mood_log, snapshot = _interaction_response(user_id, "video", analyze_video(video_base64), user=user)
+    return Response({"message": "Video processed", "moodLog": MoodLogSerializer(mood_log).data, "burnoutRisk": snapshot})
 
 
 @api_view(["GET", "POST"])
@@ -207,42 +349,58 @@ def mood_view(request):
     if request.method == "POST":
         serializer = MoodEntrySerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        user_id = serializer.validated_data["userId"]
-        user = _find_user_by_identifier(user_id)
+        user_id, user, auth_error = _resolve_actor(
+            request,
+            serializer.validated_data.get("userId"),
+            require_auth=True,
+        )
+        if auth_error:
+            return auth_error
+
         mood_log = create_mood_log(
             user_id=user_id,
             source_mode=serializer.validated_data["sourceMode"],
             analysis={
                 "emotion": serializer.validated_data["emotion"],
                 "confidence": serializer.validated_data.get("details", {}).get("confidence", 0.88),
-                "details": serializer.validated_data.get("details", {}),
+                "details": {
+                    **serializer.validated_data.get("details", {}),
+                    "confidence": serializer.validated_data.get("details", {}).get("confidence", 0.88),
+                },
             },
             user=user,
         )
         snapshot = format_burnout_snapshot(get_user_logs(user_id))
         return Response({"entry": MoodLogSerializer(mood_log).data, "burnoutRisk": snapshot})
 
-    user_id = request.query_params.get("userId") or request.headers.get("x-user-id")
-    if not user_id:
-        return Response({"message": "userId required"}, status=status.HTTP_400_BAD_REQUEST)
+    user_id, _, auth_error = _resolve_actor(
+        request,
+        request.query_params.get("userId") or request.headers.get("x-user-id"),
+        require_auth=True,
+    )
+    if auth_error:
+        return auth_error
+
     logs = get_user_logs(user_id)
     return Response(MoodLogSerializer(logs[:50], many=True).data)
 
 
 @api_view(["GET"])
 def mood_history_view(request):
-    user_id = request.query_params.get("userId")
-    if not user_id:
-        return Response({"message": "userId required"}, status=status.HTTP_400_BAD_REQUEST)
+    user_id, _, auth_error = _resolve_actor(request, request.query_params.get("userId"), require_auth=True)
+    if auth_error:
+        return auth_error
+
     logs = get_user_logs(user_id)
     return Response(MoodLogSerializer(logs[:30], many=True).data)
 
 
 @api_view(["GET"])
 def burnout_risk_view(request):
-    user_id = request.query_params.get("userId")
-    if not user_id:
-        return Response({"message": "userId required"}, status=status.HTTP_400_BAD_REQUEST)
+    user_id, _, auth_error = _resolve_actor(request, request.query_params.get("userId"), require_auth=True)
+    if auth_error:
+        return auth_error
+
     snapshot = format_burnout_snapshot(get_user_logs(user_id))
     return Response(snapshot)
 
@@ -252,7 +410,11 @@ def register_token_view(request):
     serializer = TokenRegistrationSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
 
-    user = _find_user_by_identifier(serializer.validated_data["userId"])
+    user_id, user, auth_error = _resolve_actor(request, serializer.validated_data.get("userId"), require_auth=True)
+    if auth_error:
+        return auth_error
+    if not user:
+        user = _find_user_by_identifier(user_id)
     if not user:
         return Response({"message": "User not found"}, status=status.HTTP_404_NOT_FOUND)
 
@@ -266,7 +428,11 @@ def send_alert_view(request):
     serializer = NotificationSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
 
-    user = _find_user_by_identifier(serializer.validated_data["userId"])
+    user_id, user, auth_error = _resolve_actor(request, serializer.validated_data.get("userId"), require_auth=True)
+    if auth_error:
+        return auth_error
+    if not user:
+        user = _find_user_by_identifier(user_id)
     if not user or not user.expo_push_token:
         return Response(
             {"message": "User or push token not found"},

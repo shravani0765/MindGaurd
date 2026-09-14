@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import './App.css';
 import Header from './components/Header';
 import ModeSwitcher from './components/ModeSwitcher';
@@ -9,11 +9,14 @@ import ComboInterface from './components/ComboInterface';
 import BurnoutRadar from './components/BurnoutRadar';
 import SadhguruMeditationModal from './components/SadhguruMeditationModal';
 import InsightsPanel from './components/InsightsPanel';
+import DashboardHero from './components/DashboardHero';
+import RecoveryGuidePanel from './components/RecoveryGuidePanel';
+import AuthScreen from './components/AuthScreen';
 import { ambianceEngine } from './services/audioAmbiance';
-import { ArrowUpRight, Music, Sparkles, X } from 'lucide-react';
+import { Music, X } from 'lucide-react';
 import { apiClient } from './services/api';
+import { clearStoredSession, loadStoredSession, saveStoredSession } from './services/authSession';
 
-const DEMO_USER_ID = 'user_demo_01';
 const EMPTY_SNAPSHOT = {
   burnoutRisk: 28,
   level: 'Low',
@@ -24,36 +27,97 @@ const EMPTY_SNAPSHOT = {
 };
 
 export default function App() {
+  const routeInfo = getRouteInfo();
+  const initialSessionRef = useRef(loadStoredSession());
+  const [session, setSession] = useState(initialSessionRef.current);
+  const [isCheckingSession, setIsCheckingSession] = useState(() => Boolean(initialSessionRef.current?.authToken));
   const [currentMode, setCurrentMode] = useState('text');
   const [isMicOn, setIsMicOn] = useState(false);
   const [isCamOn, setIsCamOn] = useState(false);
   const [showTranscript, setShowTranscript] = useState(true);
   const [moodHistory, setMoodHistory] = useState([]);
-  const [burnoutSnapshot, setBurnoutSnapshot] = useState(EMPTY_SNAPSHOT);
-  const [isSyncingInsights, setIsSyncingInsights] = useState(true);
+  const [burnoutSnapshot, setBurnoutSnapshot] = useState(() => loadStoredSession()?.burnoutSnapshot || EMPTY_SNAPSHOT);
+  const [isSyncingInsights, setIsSyncingInsights] = useState(false);
   const [isDashboardOpen, setIsDashboardOpen] = useState(false);
   const [isMeditationOpen, setIsMeditationOpen] = useState(false);
   const [interventionToast, setInterventionToast] = useState(null);
 
+  const activeUserId = session?.user?.id || null;
   const burnoutScore = burnoutSnapshot.burnoutRisk;
 
   useEffect(() => {
-    void refreshInsights();
+    let cancelled = false;
+    const savedSession = initialSessionRef.current;
+
+    async function restoreSession() {
+      if (!savedSession?.authToken) {
+        setIsCheckingSession(false);
+        return;
+      }
+
+      setIsCheckingSession(true);
+      try {
+        const current = await apiClient.getCurrentSession();
+        if (cancelled) return;
+        const nextSession = {
+          ...savedSession,
+          user: current.user,
+          burnoutSnapshot: current.burnoutSnapshot || savedSession.burnoutSnapshot || EMPTY_SNAPSHOT,
+        };
+        saveStoredSession(nextSession);
+        setSession(nextSession);
+        setBurnoutSnapshot(nextSession.burnoutSnapshot || EMPTY_SNAPSHOT);
+      } catch (error) {
+        console.warn('Unable to restore saved session:', error);
+        clearStoredSession();
+        if (!cancelled) {
+          setSession(null);
+          setBurnoutSnapshot(EMPTY_SNAPSHOT);
+        }
+      } finally {
+        if (!cancelled) {
+          setIsCheckingSession(false);
+        }
+      }
+    }
+
+    void restoreSession();
+    return () => {
+      cancelled = true;
+    };
   }, []);
+
+  useEffect(() => {
+    if (!activeUserId) {
+      setMoodHistory([]);
+      setBurnoutSnapshot(EMPTY_SNAPSHOT);
+      return;
+    }
+
+    void refreshInsights(activeUserId);
+  }, [activeUserId]);
 
   const handleToggleMic = () => setIsMicOn((prev) => !prev);
   const handleToggleCam = () => setIsCamOn((prev) => !prev);
   const handleToggleTranscript = () => setShowTranscript((prev) => !prev);
 
-  async function refreshInsights() {
+  async function refreshInsights(userId = activeUserId) {
+    if (!userId) return;
+
     setIsSyncingInsights(true);
     try {
       const [history, snapshot] = await Promise.all([
-        apiClient.getMoodHistory(DEMO_USER_ID),
-        apiClient.getBurnoutRisk(DEMO_USER_ID),
+        apiClient.getMoodHistory(userId),
+        apiClient.getBurnoutRisk(userId),
       ]);
       setMoodHistory(history);
       setBurnoutSnapshot((prev) => ({ ...prev, ...snapshot }));
+      setSession((prev) => {
+        if (!prev) return prev;
+        const nextSession = { ...prev, burnoutSnapshot: { ...prev.burnoutSnapshot, ...snapshot } };
+        saveStoredSession(nextSession);
+        return nextSession;
+      });
     } finally {
       setIsSyncingInsights(false);
     }
@@ -83,16 +147,63 @@ export default function App() {
     void refreshInsights();
   };
 
+  const handleAuthenticated = (nextSession) => {
+    saveStoredSession(nextSession);
+    setSession(nextSession);
+    setBurnoutSnapshot(nextSession.burnoutSnapshot || EMPTY_SNAPSHOT);
+    setMoodHistory([]);
+    setCurrentMode('text');
+    setIsMicOn(false);
+    setIsCamOn(false);
+    window.history.replaceState({}, '', '/');
+  };
+
+  const handleLogout = async () => {
+    try {
+      await apiClient.logout();
+    } catch (error) {
+      console.warn('Logout request failed:', error);
+    }
+
+    clearStoredSession();
+    setSession(null);
+    setMoodHistory([]);
+    setBurnoutSnapshot(EMPTY_SNAPSHOT);
+    setCurrentMode('text');
+    setIsMicOn(false);
+    setIsCamOn(false);
+    setShowTranscript(true);
+    setIsDashboardOpen(false);
+    setIsMeditationOpen(false);
+  };
+
   const recoveryActions = useMemo(
     () => getRecoveryActions(burnoutSnapshot, moodHistory[0]),
     [burnoutSnapshot, moodHistory]
   );
+
+  if (!session) {
+    return (
+      <AuthScreen
+        onAuthenticated={handleAuthenticated}
+        initialMode={routeInfo.path === '/reset-password' ? 'reset' : 'login'}
+        routePath={routeInfo.path}
+        routeToken={routeInfo.token}
+      />
+    );
+  }
+
+  if (isCheckingSession) {
+    return <div className="app-loading">Restoring your private check-in space...</div>;
+  }
 
   return (
     <div className="app-shell">
       <Header
         burnoutScore={burnoutScore}
         onOpenDashboard={() => setIsDashboardOpen(true)}
+        userName={session.user?.firstName || session.user?.name}
+        onLogout={handleLogout}
       />
 
       {interventionToast && (
@@ -100,6 +211,7 @@ export default function App() {
           <Music size={18} color="var(--sage-green)" />
           <span>{interventionToast}</span>
           <button
+            type="button"
             onClick={() => setInterventionToast(null)}
             className="toast-dismiss"
           >
@@ -110,40 +222,12 @@ export default function App() {
 
       <main className="app-content">
         <section className="hero-grid">
-          <div className="hero-panel glass-panel">
-            <span className="eyebrow">Calm And Clear</span>
-            <h2>A softer, simpler way to check in with your stress.</h2>
-            <p>
-              Choose the mode that feels easiest right now. Write, speak, or use video when you want
-              a fuller signal. The goal is to help you notice pressure early and respond gently.
-            </p>
-
-            <div className="hero-actions">
-              <button className="btn-primary" type="button" onClick={() => setCurrentMode('text')}>
-                <Sparkles size={16} />
-                Start a check-in
-              </button>
-              <button className="btn-ghost" type="button" onClick={() => setIsDashboardOpen(true)}>
-                <ArrowUpRight size={14} />
-                View your trends
-              </button>
-            </div>
-
-            <div className="hero-meta-grid">
-              <div className="hero-meta-card">
-                <span>Current mode</span>
-                <strong>{formatLabel(currentMode)}</strong>
-              </div>
-              <div className="hero-meta-card">
-                <span>Current score</span>
-                <strong>{burnoutSnapshot.burnoutRisk}%</strong>
-              </div>
-              <div className="hero-meta-card">
-                <span>Latest pattern</span>
-                <strong>{formatLabel(burnoutSnapshot.latestEmotion)}</strong>
-              </div>
-            </div>
-          </div>
+          <DashboardHero
+            currentMode={currentMode}
+            burnoutSnapshot={burnoutSnapshot}
+            onStartCheckIn={() => setCurrentMode('text')}
+            onViewTrends={() => setIsDashboardOpen(true)}
+          />
 
           <InsightsPanel
             burnoutSnapshot={burnoutSnapshot}
@@ -180,7 +264,7 @@ export default function App() {
                 showTranscript={showTranscript}
                 onMoodLogged={handleMoodLogged}
                 onOpenMeditation={() => setIsMeditationOpen(true)}
-                userId={DEMO_USER_ID}
+                userId={activeUserId}
               />
             )}
 
@@ -190,12 +274,12 @@ export default function App() {
                 onToggleMic={handleToggleMic}
                 showTranscript={showTranscript}
                 onMoodLogged={handleMoodLogged}
-                userId={DEMO_USER_ID}
+                userId={activeUserId}
               />
             )}
 
             {currentMode === 'text' && (
-              <ChatInterface onMoodLogged={handleMoodLogged} userId={DEMO_USER_ID} />
+              <ChatInterface onMoodLogged={handleMoodLogged} userId={activeUserId} />
             )}
 
             {currentMode === 'video' && (
@@ -203,43 +287,12 @@ export default function App() {
                 isCamOn={isCamOn}
                 onToggleCam={handleToggleCam}
                 onMoodLogged={handleMoodLogged}
-                userId={DEMO_USER_ID}
+                userId={activeUserId}
               />
             )}
           </div>
 
-          <aside className="guide-panel glass-panel">
-            <div className="guide-panel__header">
-              <span className="eyebrow">Helpful next steps</span>
-              <h3>Small actions that can help today</h3>
-            </div>
-
-            <div className="guide-card-list">
-              {recoveryActions.map((action) => (
-                <div key={action.title} className="guide-card">
-                  <strong>{action.title}</strong>
-                  <p>{action.body}</p>
-                </div>
-              ))}
-            </div>
-
-            <div className="guide-panel__history">
-              <div className="guide-panel__history-header">
-                <span>Recent check-ins</span>
-                <span>{moodHistory.length}</span>
-              </div>
-              {moodHistory.length ? (
-                moodHistory.slice(0, 4).map((entry) => (
-                  <div key={entry.id} className="history-row">
-                    <span className={`badge-emotion ${entry.emotion}`}>{formatLabel(entry.emotion)}</span>
-                    <small>{formatTimestamp(entry.timestamp)}</small>
-                  </div>
-                ))
-              ) : (
-                <p className="empty-copy">Your first check-in will show up here and shape the weekly trend.</p>
-              )}
-            </div>
-          </aside>
+          <RecoveryGuidePanel recoveryActions={recoveryActions} moodHistory={moodHistory} />
         </section>
       </main>
 
@@ -257,6 +310,18 @@ export default function App() {
       />
     </div>
   );
+}
+
+function getRouteInfo() {
+  if (typeof window === 'undefined') {
+    return { path: '/', token: '' };
+  }
+
+  const url = new URL(window.location.href);
+  return {
+    path: url.pathname,
+    token: url.searchParams.get('token') || '',
+  };
 }
 
 function normalizeMoodLog(logEntry) {
@@ -365,19 +430,4 @@ function getRecoveryActions(snapshot, latestEntry) {
       body: 'Open the meditation flow after your last session to lower carryover stress into the evening.',
     },
   ];
-}
-
-function formatLabel(value) {
-  return (value || 'neutral')
-    .replace(/[-_]/g, ' ')
-    .replace(/\b\w/g, (character) => character.toUpperCase());
-}
-
-function formatTimestamp(timestamp) {
-  return new Date(timestamp).toLocaleString([], {
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-  });
 }
