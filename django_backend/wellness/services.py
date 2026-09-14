@@ -1,5 +1,6 @@
 from collections import Counter
 from datetime import timedelta
+import re
 import zlib
 
 from django.utils import timezone
@@ -11,35 +12,119 @@ EMOTION_SCORES = {
     "calm": 0.12,
     "neutral": 0.42,
     "sad": 0.58,
+    "fatigued": 0.66,
     "anxious": 0.78,
     "stressed": 0.9,
 }
 
-TEXT_RULES = [
-    ("stressed", ("stress", "burnout", "deadline", "panic", "overwhelm", "tired", "exhausted")),
-    ("anxious", ("anxious", "worry", "nervous", "afraid")),
-    ("happy", ("happy", "great", "good", "grateful", "joy", "proud")),
-    ("calm", ("calm", "rested", "peaceful", "relaxed", "grounded")),
-]
+TEXT_RULES = {
+    "stressed": [
+        ("stress", 2.5),
+        ("burnout", 3.2),
+        ("deadline", 2.5),
+        ("panic", 2.4),
+        ("overwhelm", 3.0),
+        ("overwhelmed", 3.0),
+        ("pressure", 2.2),
+        ("workload", 2.0),
+        ("unmanageable", 2.4),
+    ],
+    "anxious": [
+        ("anxious", 3.0),
+        ("worry", 2.0),
+        ("nervous", 2.0),
+        ("afraid", 2.1),
+        ("scared", 2.4),
+        ("racing thoughts", 2.8),
+        ("presentation", 1.6),
+    ],
+    "fatigued": [
+        ("tired", 2.5),
+        ("exhausted", 3.1),
+        ("drained", 2.8),
+        ("heavy", 1.5),
+        ("sleepy", 2.1),
+        ("no energy", 2.9),
+        ("worn out", 2.8),
+    ],
+    "happy": [
+        ("happy", 2.8),
+        ("great", 2.0),
+        ("good", 1.5),
+        ("grateful", 2.6),
+        ("joy", 2.4),
+        ("proud", 2.4),
+        ("milestone", 2.3),
+    ],
+    "calm": [
+        ("calm", 2.6),
+        ("rested", 2.1),
+        ("peaceful", 2.5),
+        ("relaxed", 2.4),
+        ("grounded", 2.4),
+        ("steady", 1.7),
+    ],
+    "sad": [
+        ("sad", 2.7),
+        ("lonely", 2.8),
+        ("alone", 2.5),
+        ("empty", 2.4),
+        ("numb", 2.3),
+        ("low", 1.4),
+    ],
+}
+
+INTENSIFIERS = ("very", "really", "extremely", "deeply", "so", "totally", "completely")
+SOFTENERS = ("a bit", "a little", "kind of", "slightly", "somewhat")
+MODE_WEIGHTS = {"text": 1.0, "voice": 1.05, "video": 0.95, "combo": 1.15}
+
+TOPIC_FLAGS = {
+    "workPressure": ("work", "deadline", "meeting", "boss", "presentation", "project", "task"),
+    "sleepDepletion": ("sleep", "rest", "exhausted", "drained", "tired", "no energy"),
+    "grounding": ("breathe", "breathing", "panic", "racing thoughts", "calm me down"),
+    "celebration": ("proud", "milestone", "happy", "grateful", "achieved"),
+    "loneliness": ("alone", "lonely", "isolated", "disconnected"),
+    "selfHarm": ("hurt myself", "kill myself", "end it all", "want to disappear", "not worth living"),
+}
 
 
 def analyze_text(text):
-    lowered = text.lower()
-    emotion = "neutral"
-    confidence = 0.74
+    lowered = (text or "").strip().lower()
+    scores = {emotion: 0.45 for emotion in EMOTION_SCORES.keys()}
+    scores["neutral"] += 0.6
+    topic_flags = {flag: any(pattern in lowered for pattern in patterns) for flag, patterns in TOPIC_FLAGS.items()}
 
-    for label, keywords in TEXT_RULES:
-        if any(keyword in lowered for keyword in keywords):
-            emotion = label
-            confidence = 0.92 if label in {"stressed", "happy"} else 0.86
-            break
+    for emotion, patterns in TEXT_RULES.items():
+        for pattern, weight in patterns:
+            if pattern in lowered:
+                scores[emotion] += _apply_intensity(lowered, weight)
 
+    if topic_flags["workPressure"]:
+        scores["stressed"] += 0.9
+    if topic_flags["sleepDepletion"]:
+        scores["fatigued"] += 0.8
+    if topic_flags["grounding"]:
+        scores["anxious"] += 0.8
+    if topic_flags["celebration"]:
+        scores["happy"] += 0.8
+    if topic_flags["loneliness"]:
+        scores["sad"] += 0.9
+    if topic_flags["selfHarm"]:
+        scores["stressed"] += 2.6
+
+    ranked = sorted(scores.items(), key=lambda item: item[1], reverse=True)
+    emotion = ranked[0][0]
+    confidence = _clamp(0.58 + ((ranked[0][1] - ranked[1][1]) / 6), 0.58, 0.97)
+    urgency = "high" if topic_flags["selfHarm"] else "elevated" if topic_flags["grounding"] and "panic" in lowered else "normal"
     details = {
-        "confidence": confidence,
+        "confidence": round(confidence, 2),
         "summary": f"Detected {emotion} sentiment from reflection text.",
-        "suggestion": suggested_action(emotion),
+        "suggestion": suggested_action(emotion, topic_flags, urgency),
+        "topicFlags": topic_flags,
+        "urgency": urgency,
+        "confidenceBand": "high" if confidence >= 0.84 else "medium" if confidence >= 0.7 else "low",
     }
-    return {"emotion": emotion, "confidence": confidence, "details": details}
+    return {"emotion": emotion, "confidence": round(confidence, 2), "details": details}
 
 
 def analyze_audio(audio_base64):
@@ -52,13 +137,28 @@ def analyze_video(video_base64):
 
 def analyze_binary_payload(payload, mode):
     checksum = zlib.crc32(payload.encode("utf-8"))
-    options = ["calm", "neutral", "happy", "stressed"]
-    emotion = options[checksum % len(options)]
-    confidence = 0.7 + ((checksum % 18) / 100)
+    payload_length = len(payload)
+    symbol_ratio = (payload.count("+") + payload.count("/")) / max(payload_length, 1)
+    diversity = len(set(payload)) / max(payload_length, 1)
+
+    if payload_length > 120000 or symbol_ratio > 0.035:
+        emotion = "stressed"
+    elif payload_length > 80000:
+        emotion = "fatigued"
+    elif diversity < 0.018:
+        emotion = "calm"
+    elif checksum % 5 == 0:
+        emotion = "happy"
+    else:
+        emotion = "neutral"
+
+    confidence = _clamp(0.66 + min(payload_length / 220000, 0.16) + min(symbol_ratio, 0.08), 0.66, 0.9)
     details = {
         "confidence": round(confidence, 2),
         "summary": f"Estimated {emotion} state from {mode} sample.",
-        "suggestion": suggested_action(emotion),
+        "suggestion": suggested_action(emotion, {}, "normal"),
+        "topicFlags": {},
+        "urgency": "normal",
     }
     return {"emotion": emotion, "confidence": round(confidence, 2), "details": details}
 
@@ -95,10 +195,21 @@ def format_burnout_snapshot(log_queryset):
             "trend": "steady",
             "latestEmotion": "neutral",
             "dominantEmotion": "neutral",
+            "recommendedCadence": "Two gentle check-ins across the day",
         }
 
-    recent = logs[:7]
-    average = sum(EMOTION_SCORES.get(item.emotion, 0.42) for item in recent) / len(recent)
+    recent = logs[:10]
+    weighted_scores = []
+    weighted_counter = Counter()
+    for index, item in enumerate(recent):
+        recency_weight = 1 / (1 + (index * 0.38))
+        confidence_weight = float(item.details.get("confidence", 0.8)) if isinstance(item.details, dict) else 0.8
+        mode_weight = MODE_WEIGHTS.get(item.source_mode, 1.0)
+        weight = recency_weight * max(confidence_weight, 0.45) * mode_weight
+        weighted_scores.append((EMOTION_SCORES.get(item.emotion, 0.42), weight))
+        weighted_counter[item.emotion] += weight
+
+    average = sum(score * weight for score, weight in weighted_scores) / sum(weight for _, weight in weighted_scores)
     burnout_risk = round(average * 100)
 
     if burnout_risk >= 70:
@@ -111,8 +222,8 @@ def format_burnout_snapshot(log_queryset):
         level = "Low"
         status = "Healthy equilibrium"
 
-    recent_average = sum(EMOTION_SCORES.get(item.emotion, 0.42) for item in recent) / len(recent)
-    prior_window = logs[7:14]
+    recent_average = average
+    prior_window = logs[5:14]
     prior_average = (
         sum(EMOTION_SCORES.get(item.emotion, 0.42) for item in prior_window) / len(prior_window)
         if prior_window
@@ -127,7 +238,7 @@ def format_burnout_snapshot(log_queryset):
     else:
         trend = "steady"
 
-    dominant_emotion = Counter(item.emotion for item in recent).most_common(1)[0][0]
+    dominant_emotion = weighted_counter.most_common(1)[0][0]
     return {
         "burnoutRisk": burnout_risk,
         "level": level,
@@ -135,12 +246,21 @@ def format_burnout_snapshot(log_queryset):
         "trend": trend,
         "latestEmotion": recent[0].emotion,
         "dominantEmotion": dominant_emotion,
+        "recommendedCadence": recommended_cadence(level),
     }
 
 
-def suggested_action(emotion):
-    if emotion in {"stressed", "anxious"}:
-        return "Take a 3-minute breathing reset and reduce one active demand."
+def suggested_action(emotion, topic_flags=None, urgency="normal"):
+    topic_flags = topic_flags or {}
+
+    if urgency == "high":
+        return "Reach out to a trusted person or local emergency support immediately."
+    if topic_flags.get("workPressure"):
+        return "Pick one next task and deliberately pause the rest for a few minutes."
+    if topic_flags.get("sleepDepletion") or emotion == "fatigued":
+        return "Take a short recovery break with water, slower breathing, and less screen strain."
+    if emotion in {"stressed", "anxious", "sad"}:
+        return "Take a 3-minute grounding reset and reduce one active demand."
     if emotion in {"happy", "calm"}:
         return "Capture what is helping so you can repeat it later."
     return "Add one short reflection so MindGuard can build a steadier baseline."
@@ -171,3 +291,26 @@ def group_logs_by_day(logs, days=7):
             }
         )
     return buckets
+
+
+def recommended_cadence(level):
+    if level == "High":
+        return "Check in every few hours and end the day with a cooldown"
+    if level == "Moderate":
+        return "Aim for a morning, midday, and evening check-in"
+    return "Two gentle check-ins across the day"
+
+
+def _apply_intensity(content, weight):
+    multiplier = 1.0
+    for word in INTENSIFIERS:
+        if re.search(rf"\b{re.escape(word)}\b", content):
+            multiplier += 0.1
+    for phrase in SOFTENERS:
+        if phrase in content:
+            multiplier -= 0.08
+    return weight * multiplier
+
+
+def _clamp(value, minimum, maximum):
+    return max(minimum, min(maximum, value))

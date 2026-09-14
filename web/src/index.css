@@ -397,6 +397,12 @@ body::after {
   color: #F5C6A5;
 }
 
+.badge-emotion.anxious, .badge-emotion.sad {
+  background: rgba(245, 158, 11, 0.15);
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  color: #FCD34D;
+}
+
 .badge-emotion.neutral {
   background: rgba(110, 193, 228, 0.15);
   border: 1px solid rgba(110, 193, 228, 0.4);

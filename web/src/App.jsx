@@ -284,6 +284,7 @@ function buildSnapshot(logs) {
     happy: 0.2,
     neutral: 0.42,
     sad: 0.58,
+    fatigued: 0.66,
     anxious: 0.78,
     stressed: 0.9,
   };
@@ -307,7 +308,12 @@ function buildSnapshot(logs) {
         : burnoutRisk >= 45
           ? 'Recovery pacing recommended'
           : 'Healthy equilibrium',
-    trend: recent[0]?.emotion === 'happy' || recent[0]?.emotion === 'calm' ? 'improving' : 'steady',
+    trend:
+      recent[0]?.emotion === 'happy' || recent[0]?.emotion === 'calm'
+        ? 'improving'
+        : ['stressed', 'anxious', 'fatigued', 'sad'].includes(recent[0]?.emotion)
+          ? 'rising'
+          : 'steady',
     latestEmotion: recent[0]?.emotion || 'neutral',
     dominantEmotion: dominantEmotion || 'neutral',
   };

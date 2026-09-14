@@ -114,8 +114,12 @@ function normalizeMoodLog(moodLog) {
 function mockAnalysis(mode, text = '') {
   let emotion = 'calm';
   const lower = text.toLowerCase();
-  if (/stress|tired|overwhelm|anxious|burnout|exhausted|deadline/.test(lower)) {
+  if (/anxious|panic|worried|racing/.test(lower)) {
+    emotion = 'anxious';
+  } else if (/stress|overwhelm|burnout|deadline|pressure/.test(lower)) {
     emotion = 'stressed';
+  } else if (/tired|exhausted|drained|no energy|sleepy/.test(lower)) {
+    emotion = 'fatigued';
   } else if (/happy|great|good|peace|relaxed|grateful|joy/.test(lower)) {
     emotion = 'happy';
   } else {
@@ -129,7 +133,7 @@ function mockAnalysis(mode, text = '') {
       emotion,
       sourceMode: mode,
       timestamp: new Date().toISOString(),
-      details: { confidence: 0.92 },
+      details: { confidence: 0.92, urgency: 'normal', topicFlags: {} },
     }),
   };
 }

@@ -2,6 +2,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Send, Sparkles, User, Bot, HeartPulse } from 'lucide-react';
 import { apiClient } from '../services/api';
+import { buildComfortResponse } from '../services/wellnessIntelligence';
 
 export default function ChatInterface({ userId = 'user_demo_01', onMoodLogged }) {
   const [messages, setMessages] = useState([
@@ -43,6 +44,13 @@ export default function ChatInterface({ userId = 'user_demo_01', onMoodLogged })
       const response = await apiClient.sendTextInteraction(userId, userText);
       const emotion = response.moodLog?.emotion || 'calm';
       const confidence = response.moodLog?.details?.confidence || 0.92;
+      const comfort = buildComfortResponse({
+        text: userText,
+        emotion,
+        urgency: response.moodLog?.details?.urgency || 'normal',
+        topicFlags: response.moodLog?.details?.topicFlags || {},
+        mode: 'text',
+      });
 
       if (onMoodLogged) onMoodLogged(response.moodLog);
 
@@ -56,7 +64,7 @@ export default function ChatInterface({ userId = 'user_demo_01', onMoodLogged })
         const aiMsg = {
           id: Date.now() + 1,
           sender: 'ai',
-          text: generateEmpatheticTextReply(userText, emotion),
+          text: `${comfort.message} ${comfort.followUp}`.trim(),
           emotion,
           timestamp: 'Just now',
         };
@@ -233,17 +241,9 @@ export default function ChatInterface({ userId = 'user_demo_01', onMoodLogged })
           <span>Send</span>
         </button>
       </form>
+      <p style={{ marginTop: '10px', fontSize: '0.76rem', color: 'var(--text-muted)', textAlign: 'center' }}>
+        Short messages are enough. The app should adapt to your pace, not the other way around.
+      </p>
     </div>
   );
-}
-
-function generateEmpatheticTextReply(text, emotion) {
-  const lower = text.toLowerCase();
-  if (emotion === 'stressed' || /workload|anxious|unmanageable|overwhelm/.test(lower)) {
-    return "I hear how heavy this feels right now. Chronic cognitive strain accumulates quickly when we don't build in micro-pauses. Let's break this down: What is one small thing you can safely defer or delegate until tomorrow?";
-  }
-  if (emotion === 'happy' || /achieved|great|good|milestone/.test(lower)) {
-    return "That is wonderful! Taking a moment to savor your achievements replenishes emotional resilience. How can you reward yourself today for this milestone?";
-  }
-  return "Thank you for sharing your reflection. Writing down how we feel activates the prefrontal cortex, naturally calming the amygdala. How does your energy level feel on a scale of 1 to 10 right now?";
 }

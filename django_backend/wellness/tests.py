@@ -38,6 +38,16 @@ class WellnessApiTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertGreaterEqual(response.json()["burnoutRisk"], 70)
 
+    def test_text_analysis_detects_fatigue_and_flags(self):
+        response = self.client.post(
+            "/api/interactions/text",
+            {"userId": "demo-user", "text": "I am exhausted after back-to-back meetings and have no energy"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["moodLog"]["emotion"], "fatigued")
+        self.assertTrue(response.json()["moodLog"]["details"]["topicFlags"]["workPressure"])
+
     def test_register_login_verify_flow(self):
         register_response = self.client.post(
             "/api/auth/register",

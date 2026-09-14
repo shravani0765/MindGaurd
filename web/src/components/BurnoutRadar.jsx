@@ -222,6 +222,7 @@ function buildWeeklyTrends(moodHistory) {
     happy: 0.18,
     neutral: 0.42,
     sad: 0.58,
+    fatigued: 0.66,
     anxious: 0.78,
     stressed: 0.9,
   };

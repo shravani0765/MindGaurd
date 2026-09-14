@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { Mic, MicOff, Sparkles, Radio, HeartPulse } from 'lucide-react';
 import { speechService } from '../services/speech';
 import { apiClient } from '../services/api';
+import { buildComfortResponse } from '../services/wellnessIntelligence';
 
 export default function VoiceAssistantOrb({
   isMicOn,
@@ -66,13 +67,19 @@ export default function VoiceAssistantOrb({
       const response = await apiClient.sendTextInteraction(userId, userText);
       const emotion = response.moodLog?.emotion || 'calm';
       const confidence = response.moodLog?.details?.confidence || 0.92;
+      const comfort = buildComfortResponse({
+        text: userText,
+        emotion,
+        urgency: response.moodLog?.details?.urgency || 'normal',
+        topicFlags: response.moodLog?.details?.topicFlags || {},
+        mode: 'voice',
+      });
       setDetectedEmotion(emotion);
       setEmotionConfidence(confidence);
 
       if (onMoodLogged) onMoodLogged(response.moodLog);
 
-      // 2. Generate calming compassionate reply
-      const aiReply = generateCalmingVoiceReply(userText, emotion);
+      const aiReply = `${comfort.message} ${comfort.followUp}`.trim();
       setLastResponse(aiReply);
 
       // 3. Speak reply using Web Speech Synthesis
@@ -231,6 +238,9 @@ export default function VoiceAssistantOrb({
           <span>{isMicOn ? 'Pause Listening' : 'Start Voice Chat'}</span>
         </button>
       </div>
+      <p style={{ marginTop: '10px', fontSize: '0.76rem', color: 'var(--text-muted)', textAlign: 'center' }}>
+        You can pause, restart, or speak briefly at any time. Comfort matters more than perfect input.
+      </p>
 
       {/* Quick Calming Prompt Chips */}
       <div style={{
@@ -259,26 +269,4 @@ export default function VoiceAssistantOrb({
       </div>
     </div>
   );
-}
-
-function generateCalmingVoiceReply(userText, emotion) {
-  const lower = userText.toLowerCase();
-
-  if (lower.includes('breath') || lower.includes('breathing')) {
-    return 'Let us breathe together. Inhale deeply through your nose for four counts... hold gently... and release slowly through your mouth. Notice your shoulders relaxing with each breath.';
-  }
-
-  if (lower.includes('meeting') || lower.includes('exhausted') || lower.includes('tired') || emotion === 'stressed') {
-    return 'I hear the weight you are carrying today. It takes courage to acknowledge mental fatigue. Grant yourself permission to step away from the screen for just five minutes, drink a glass of water, and let your mind reset.';
-  }
-
-  if (lower.includes('burnout') || lower.includes('trend')) {
-    return 'Your emotional velocity is stabilizing. With consistent pacing and mindful rest breaks, your risk index remains well within safe parameters.';
-  }
-
-  if (lower.includes('wind down') || lower.includes('disconnect')) {
-    return 'Close your eyes for a moment. You have worked diligently today. Whatever remains on your task list can wait until tomorrow. Let your mind embrace this tranquil evening.';
-  }
-
-  return 'Thank you for sharing that with me. Remember that your peace of mind is your greatest asset. How does your body feel right now?';
 }
