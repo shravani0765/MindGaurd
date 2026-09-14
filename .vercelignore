@@ -1,0 +1,10 @@
+.venv
+backend
+django_backend
+mobile
+outputs
+work
+test_write.txt
+render.yaml
+README.md
+**/__pycache__

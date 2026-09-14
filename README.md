@@ -53,7 +53,7 @@ The web app now:
 ```bash
 python3 -m venv .venv
 . .venv/bin/activate
-pip install -r requirements.txt
+pip install -r django_backend/requirements.txt
 cd django_backend
 python manage.py migrate
 python manage.py runserver
@@ -95,9 +95,10 @@ These are the highest-value improvements still worth doing next:
 
 ## Deployment notes
 
-- `render.yaml` now targets the Django API service.
-- `web/vercel.json` no longer hardcodes the old Node backend.
-- For Vercel, set `VITE_API_URL` to your deployed Django API URL.
+- The repo root now deploys the React frontend on Vercel via [vercel.json](/Users/shravani/Documents/Codex/2026-09-14/https-github-com-khushiraj29-mindguard-git/work/MindGuard/vercel.json).
+- `render.yaml` targets the Django API service and installs from `django_backend/requirements.txt`.
+- `web/vercel.json` remains available if you ever deploy the `web/` folder by itself.
+- For Vercel, set `VITE_API_URL` to your deployed Django API URL when the backend is live.
 
 ## Important note about GitHub updates
 
