@@ -4,5 +4,15 @@
   "installCommand": "npm --prefix web install",
   "buildCommand": "npm --prefix web run build",
   "outputDirectory": "web/dist",
-  "cleanUrls": true
+  "cleanUrls": true,
+  "rewrites": [
+    {
+      "source": "/verify-email",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/reset-password",
+      "destination": "/index.html"
+    }
+  ]
 }
