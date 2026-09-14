@@ -24,9 +24,9 @@ const EMPTY_SNAPSHOT = {
 };
 
 export default function App() {
-  const [currentMode, setCurrentMode] = useState('combo');
-  const [isMicOn, setIsMicOn] = useState(true);
-  const [isCamOn, setIsCamOn] = useState(true);
+  const [currentMode, setCurrentMode] = useState('text');
+  const [isMicOn, setIsMicOn] = useState(false);
+  const [isCamOn, setIsCamOn] = useState(false);
   const [showTranscript, setShowTranscript] = useState(true);
   const [moodHistory, setMoodHistory] = useState([]);
   const [burnoutSnapshot, setBurnoutSnapshot] = useState(EMPTY_SNAPSHOT);
@@ -111,22 +111,21 @@ export default function App() {
       <main className="app-content">
         <section className="hero-grid">
           <div className="hero-panel glass-panel">
-            <span className="eyebrow">Django + React foundation</span>
-            <h2>MindGuard is shifting from a prototype backend to a steadier wellness platform.</h2>
+            <span className="eyebrow">Calm And Clear</span>
+            <h2>A softer, simpler way to check in with your stress.</h2>
             <p>
-              The web app now has a dedicated Django API path for mood logs, burnout risk, auth, and
-              interaction tracking. That gives the experience a cleaner base for future AI, mobile, and
-              notification upgrades.
+              Choose the mode that feels easiest right now. Write, speak, or use video when you want
+              a fuller signal. The goal is to help you notice pressure early and respond gently.
             </p>
 
             <div className="hero-actions">
-              <button className="btn-primary" type="button" onClick={() => setCurrentMode('combo')}>
+              <button className="btn-primary" type="button" onClick={() => setCurrentMode('text')}>
                 <Sparkles size={16} />
-                Launch multimodal session
+                Start a check-in
               </button>
               <button className="btn-ghost" type="button" onClick={() => setIsDashboardOpen(true)}>
                 <ArrowUpRight size={14} />
-                Review burnout radar
+                View your trends
               </button>
             </div>
 
@@ -136,12 +135,12 @@ export default function App() {
                 <strong>{formatLabel(currentMode)}</strong>
               </div>
               <div className="hero-meta-card">
-                <span>Backend status</span>
-                <strong>Django API ready</strong>
+                <span>Current score</span>
+                <strong>{burnoutSnapshot.burnoutRisk}%</strong>
               </div>
               <div className="hero-meta-card">
                 <span>Latest pattern</span>
-                <strong>{formatLabel(burnoutSnapshot.dominantEmotion)}</strong>
+                <strong>{formatLabel(burnoutSnapshot.latestEmotion)}</strong>
               </div>
             </div>
           </div>
@@ -159,12 +158,8 @@ export default function App() {
           currentMode={currentMode}
           onModeChange={(mode) => {
             setCurrentMode(mode);
-            if (mode === 'video' || mode === 'combo') {
-              setIsCamOn(true);
-            }
-            if (mode === 'voice' || mode === 'combo') {
-              setIsMicOn(true);
-            }
+            setIsMicOn(mode === 'voice' || mode === 'combo');
+            setIsCamOn(mode === 'video' || mode === 'combo');
           }}
           isMicOn={isMicOn}
           onToggleMic={handleToggleMic}
@@ -215,8 +210,8 @@ export default function App() {
 
           <aside className="guide-panel glass-panel">
             <div className="guide-panel__header">
-              <span className="eyebrow">Next best actions</span>
-              <h3>Support smooth recovery loops</h3>
+              <span className="eyebrow">Helpful next steps</span>
+              <h3>Small actions that can help today</h3>
             </div>
 
             <div className="guide-card-list">

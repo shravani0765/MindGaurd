@@ -38,8 +38,8 @@ export default function VideoInterface({ isCamOn, onToggleCam, onMoodLogged, use
         videoRef.current.srcObject = mediaStream;
       }
       setIsScanning(true);
-    } catch (err) {
-      console.warn('Camera access denied or unavailable:', err);
+    } catch (error) {
+      console.warn('Camera access denied or unavailable:', error);
       setIsScanning(false);
     }
   };
@@ -52,12 +52,10 @@ export default function VideoInterface({ isCamOn, onToggleCam, onMoodLogged, use
     setIsScanning(false);
   };
 
-  // Simulate periodic bio-facial telemetry update
   useEffect(() => {
     if (!isCamOn) return;
 
     const interval = setInterval(() => {
-      // Gentle realistic variation in telemetry
       setFacialState((prev) => ({
         ...prev,
         tension: Math.max(10, Math.min(85, prev.tension + (Math.random() * 8 - 4))),
@@ -82,197 +80,115 @@ export default function VideoInterface({ isCamOn, onToggleCam, onMoodLogged, use
     const base64Data = canvas.toDataURL('image/jpeg').split(',')[1];
 
     try {
-      const res = await apiClient.sendVideoInteraction(userId, base64Data);
-      if (onMoodLogged) onMoodLogged(res.moodLog);
-    } catch (e) {
-      console.warn('Video interaction err:', e);
+      const response = await apiClient.sendVideoInteraction(userId, base64Data);
+      if (onMoodLogged) onMoodLogged(response.moodLog);
+    } catch (error) {
+      console.warn('Video interaction err:', error);
     }
   };
 
+  const stats = [
+    {
+      label: 'Facial tension',
+      value: Math.round(facialState.tension),
+      hint: facialState.tension < 35 ? 'Low strain' : facialState.tension < 60 ? 'Watch pacing' : 'Higher strain',
+    },
+    {
+      label: 'Eye fatigue',
+      value: Math.round(facialState.fatigue),
+      hint: facialState.fatigue < 35 ? 'Fresh' : facialState.fatigue < 60 ? 'Moderate load' : 'Take a screen break',
+    },
+    {
+      label: 'Positive valence',
+      value: Math.round(facialState.valence),
+      hint: facialState.valence > 70 ? 'Steady tone' : facialState.valence > 45 ? 'Mixed signal' : 'Lower energy',
+    },
+  ];
+
   return (
-    <div style={{
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'center',
-      maxWidth: '840px',
-      margin: '0 auto',
-      width: '100%',
-      padding: '0 16px',
-    }}>
-      {/* Video Stream Stage */}
-      <div className="glass-panel" style={{
-        position: 'relative',
-        width: '100%',
-        height: '420px',
-        borderRadius: '24px',
-        overflow: 'hidden',
-        background: '#070B14',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        border: '1px solid var(--border-glass-bright)',
-      }}>
-        {isCamOn ? (
-          <>
+    <div className="video-shell">
+      <div className="experience-panel">
+        <div className="experience-panel__header">
+          <div>
+            <span className="eyebrow">Video Check-In</span>
+            <h3>Use camera only when it helps.</h3>
+            <p>Video mode is optional. It can add extra context, but text and voice still work well on their own.</p>
+          </div>
+
+          <div className="experience-panel__status-row">
+            <div className={`badge-emotion ${facialState.emotion}`}>
+              <HeartPulse size={12} />
+              <span>{formatLabel(facialState.emotion)} {Math.round(facialState.confidence * 100)}%</span>
+            </div>
+            <div className="experience-panel__status">
+              <ShieldCheck size={14} />
+              <span>{isScanning ? 'Private scan live' : 'Camera paused'}</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="video-shell__stage glass-panel">
+          {isCamOn ? (
             <video
               ref={videoRef}
               autoPlay
               playsInline
               muted
-              style={{
-                width: '100%',
-                height: '100%',
-                objectFit: 'cover',
-                transform: 'scaleX(-1)', // Mirror effect
-              }}
+              className="video-shell__media"
             />
-
-            {/* AI Facial Landmark Reticle Overlay */}
-            <div style={{
-              position: 'absolute',
-              top: '50%',
-              left: '50%',
-              transform: 'translate(-50%, -50%)',
-              width: '220px',
-              height: '280px',
-              border: '2px dashed rgba(110, 193, 228, 0.4)',
-              borderRadius: '50% 50% 45% 45%',
-              pointerEvents: 'none',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}>
-              <div style={{
-                position: 'absolute',
-                top: '12px',
-                fontSize: '0.68rem',
-                color: 'var(--calm-blue)',
-                background: 'rgba(7, 11, 20, 0.8)',
-                padding: '2px 8px',
-                borderRadius: '999px',
-              }}>
-                Face Target
+          ) : (
+            <div className="video-shell__empty">
+              <div className="video-shell__empty-icon">
+                <VideoOff size={30} />
               </div>
+              <h4>Camera is off</h4>
+              <p>Turn it on only if you want an extra facial check-in. You can always stay with text or voice instead.</p>
+              <button type="button" onClick={onToggleCam} className="btn-primary">
+                <Video size={16} />
+                Turn camera on
+              </button>
+            </div>
+          )}
+
+          <canvas ref={canvasRef} style={{ display: 'none' }} />
+        </div>
+
+        {isCamOn && (
+          <>
+            <div className="video-shell__stats">
+              {stats.map((stat) => (
+                <div key={stat.label} className="video-stat glass-card">
+                  <div className="video-stat__header">
+                    <span>{stat.label}</span>
+                    <strong>{stat.value}%</strong>
+                  </div>
+                  <div className="video-stat__bar">
+                    <div className="video-stat__bar-fill" style={{ width: `${stat.value}%` }} />
+                  </div>
+                  <p>{stat.hint}</p>
+                </div>
+              ))}
             </div>
 
-            {/* Live Bio-Telemetry Top Bar */}
-            <div style={{
-              position: 'absolute',
-              top: '16px',
-              left: '16px',
-              right: '16px',
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-            }}>
-              <div className="badge-emotion calm">
-                <HeartPulse size={12} />
-                Facial State: {facialState.emotion} ({Math.round(facialState.confidence * 100)}%)
-              </div>
-
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                background: 'rgba(7, 11, 20, 0.7)',
-                padding: '4px 10px',
-                borderRadius: '999px',
-                fontSize: '0.75rem',
-                color: 'var(--sage-green)',
-              }}>
-                <ShieldCheck size={13} />
-                {isScanning ? 'Live private scan' : 'Private On-Device Feed'}
-              </div>
+            <div className="video-shell__actions">
+              <button type="button" onClick={handleCaptureSnapshot} className="btn-primary">
+                <Camera size={16} />
+                Capture snapshot
+              </button>
+              <button type="button" onClick={onToggleCam} className="btn-ghost">
+                <VideoOff size={15} />
+                Turn camera off
+              </button>
             </div>
           </>
-        ) : (
-          <div style={{ textAlign: 'center', padding: '40px' }}>
-            <div style={{
-              width: '70px',
-              height: '70px',
-              borderRadius: '50%',
-              background: 'rgba(255, 255, 255, 0.05)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              margin: '0 auto 16px auto',
-              border: '1px solid var(--border-glass)',
-            }}>
-              <VideoOff size={28} color="var(--text-muted)" />
-            </div>
-            <h3 style={{ fontFamily: 'var(--font-heading)', fontSize: '1.2rem', marginBottom: '8px' }}>
-              Camera is currently disabled
-            </h3>
-            <p style={{ fontSize: '0.88rem', color: 'var(--text-secondary)', maxWidth: '380px', margin: '0 auto 20px auto' }}>
-              Enable your camera to track subtle micro-expressions, screen fatigue, and somatic tension indicators.
-            </p>
-            <button onClick={onToggleCam} className="btn-primary">
-              <Video size={16} />
-              Enable Camera Stream
-            </button>
-          </div>
         )}
-
-        <canvas ref={canvasRef} style={{ display: 'none' }} />
       </div>
-
-      {/* Real-time Facial Bio-Metrics Grid */}
-      {isCamOn && (
-        <>
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-          gap: '12px',
-          width: '100%',
-          marginTop: '16px',
-        }}>
-          {/* Tension Metric */}
-          <div className="glass-card" style={{ padding: '16px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-              <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>Facial Tension</span>
-              <span style={{ fontSize: '0.82rem', fontWeight: '600', color: 'var(--sage-green)' }}>
-                {Math.round(facialState.tension)}% (Low)
-              </span>
-            </div>
-            <div style={{ height: '6px', background: 'rgba(255,255,255,0.08)', borderRadius: '999px', overflow: 'hidden' }}>
-              <div style={{ width: `${facialState.tension}%`, height: '100%', background: 'linear-gradient(to right, #A8C6A5, #6EC1E4)' }} />
-            </div>
-          </div>
-
-          {/* Eye Fatigue Metric */}
-          <div className="glass-card" style={{ padding: '16px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-              <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>Eye Strain & Fatigue</span>
-              <span style={{ fontSize: '0.82rem', fontWeight: '600', color: 'var(--calm-blue)' }}>
-                {Math.round(facialState.fatigue)}% (Normal)
-              </span>
-            </div>
-            <div style={{ height: '6px', background: 'rgba(255,255,255,0.08)', borderRadius: '999px', overflow: 'hidden' }}>
-              <div style={{ width: `${facialState.fatigue}%`, height: '100%', background: 'linear-gradient(to right, #6EC1E4, #BAE6FD)' }} />
-            </div>
-          </div>
-
-          {/* Emotional Valence */}
-          <div className="glass-card" style={{ padding: '16px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-              <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>Positivity Valence</span>
-              <span style={{ fontSize: '0.82rem', fontWeight: '600', color: 'var(--pastel-peach)' }}>
-                {Math.round(facialState.valence)}% (Tranquil)
-              </span>
-            </div>
-            <div style={{ height: '6px', background: 'rgba(255,255,255,0.08)', borderRadius: '999px', overflow: 'hidden' }}>
-              <div style={{ width: `${facialState.valence}%`, height: '100%', background: 'linear-gradient(to right, #F5C6A5, #A8C6A5)' }} />
-            </div>
-          </div>
-        </div>
-        <div style={{ display: 'flex', justifyContent: 'center', marginTop: '16px' }}>
-          <button onClick={handleCaptureSnapshot} className="btn-primary" type="button">
-            <Camera size={16} />
-            Capture Wellness Snapshot
-          </button>
-        </div>
-        </>
-      )}
     </div>
   );
+}
+
+function formatLabel(value) {
+  return (value || 'neutral')
+    .replace(/[-_]/g, ' ')
+    .replace(/\b\w/g, (character) => character.toUpperCase());
 }

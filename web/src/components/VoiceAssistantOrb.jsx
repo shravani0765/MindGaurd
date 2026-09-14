@@ -1,6 +1,6 @@
 // web/src/components/VoiceAssistantOrb.jsx
 import React, { useState, useEffect } from 'react';
-import { Mic, MicOff, Sparkles, Radio, HeartPulse } from 'lucide-react';
+import { Mic, MicOff, Sparkles, Radio, HeartPulse, ShieldCheck } from 'lucide-react';
 import { speechService } from '../services/speech';
 import { apiClient } from '../services/api';
 import { buildComfortResponse } from '../services/wellnessIntelligence';
@@ -12,10 +12,10 @@ export default function VoiceAssistantOrb({
   onMoodLogged,
   userId = 'user_demo_01',
 }) {
-  const [orbState, setOrbState] = useState('idle'); // 'idle' | 'listening' | 'thinking' | 'speaking'
+  const [orbState, setOrbState] = useState('idle');
   const [transcript, setTranscript] = useState('');
   const [lastResponse, setLastResponse] = useState(
-    "Hello, I'm MindGuard. Take a gentle breath. Speak freely—I'm listening with full presence."
+    "Hello, I'm MindGuard. Take one slow breath and say only what feels easy to share."
   );
   const [detectedEmotion, setDetectedEmotion] = useState('calm');
   const [emotionConfidence, setEmotionConfidence] = useState(0.95);
@@ -104,169 +104,126 @@ export default function VoiceAssistantOrb({
     handleUserSpeech(promptText);
   };
 
+  const stateCopy = getStateCopy(orbState, isMicOn);
+
   return (
-    <div style={{
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'center',
-      justifyContent: 'center',
-      minHeight: '480px',
-      position: 'relative',
-      padding: '20px',
-      maxWidth: '720px',
-      margin: '0 auto',
-      width: '100%',
-    }}>
-      {/* Detected Emotion Telemetry Badge */}
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: '12px',
-        marginBottom: '28px',
-      }}>
-        <div className={`badge-emotion ${detectedEmotion}`}>
-          <HeartPulse size={12} />
-          <span>Vocal Emotion: {detectedEmotion} ({Math.round(emotionConfidence * 100)}%)</span>
-        </div>
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '6px',
-          fontSize: '0.78rem',
-          color: 'var(--text-muted)',
-        }}>
-          <Radio size={12} color={isMicOn ? 'var(--sage-green)' : 'var(--text-muted)'} />
-          <span>{isMicOn ? 'Live Stream Active' : 'Microphone Paused'}</span>
-        </div>
-      </div>
-
-      {/* Central ChatGPT Orb Stage */}
-      <div className="orb-stage" onClick={onToggleMic} style={{ cursor: 'pointer' }}>
-        {/* Ripple rings */}
-        <div className="orb-ring" style={{ opacity: orbState === 'listening' ? 0.8 : 0.2 }} />
-        <div className="orb-ring" style={{ opacity: orbState === 'speaking' ? 0.9 : 0.3 }} />
-        <div className="orb-ring" style={{ opacity: orbState === 'thinking' ? 0.7 : 0.1 }} />
-
-        {/* Pulsating glowing core */}
-        <div className={`orb-core ${orbState}`} />
-      </div>
-
-      {/* State Text Label */}
-      <div style={{ marginTop: '30px', textAlign: 'center' }}>
-        <p style={{
-          fontFamily: 'var(--font-heading)',
-          fontSize: '1.15rem',
-          fontWeight: '600',
-          color: orbState === 'listening' ? 'var(--pastel-peach)' :
-                 orbState === 'speaking' ? 'var(--sage-green-light)' :
-                 orbState === 'thinking' ? 'var(--soft-lavender)' : 'var(--calm-blue-light)',
-          letterSpacing: '-0.01em',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          gap: '8px',
-        }}>
-          {orbState === 'listening' && 'Listening to your voice...'}
-          {orbState === 'thinking' && 'Reflecting with mindfulness...'}
-          {orbState === 'speaking' && 'MindGuard is speaking...'}
-          {orbState === 'idle' && (isMicOn ? 'Ready for your voice' : 'Tap mic to speak')}
-        </p>
-
-        {/* Dynamic Sound Wave Bars */}
-        {(orbState === 'listening' || orbState === 'speaking') && (
-          <div className="audio-visualizer" style={{ marginTop: '12px' }}>
-            <div className="visualizer-bar" />
-            <div className="visualizer-bar" />
-            <div className="visualizer-bar" />
-            <div className="visualizer-bar" />
-            <div className="visualizer-bar" />
-            <div className="visualizer-bar" />
-            <div className="visualizer-bar" />
+    <div className="voice-shell">
+      <div className="experience-panel">
+        <div className="experience-panel__header">
+          <div>
+            <span className="eyebrow">Voice Check-In</span>
+            <h3>Talk it through at your own pace.</h3>
+            <p>You can speak in short fragments. The app should meet you gently, not rush you.</p>
           </div>
-        )}
-      </div>
 
-      {/* Live AI Response Subtitle Bubble */}
-      <div className="glass-panel" style={{
-        marginTop: '28px',
-        padding: '18px 24px',
-        width: '100%',
-        textAlign: 'center',
-        background: 'rgba(14, 22, 38, 0.7)',
-        borderColor: 'rgba(110, 193, 228, 0.15)',
-        boxShadow: '0 10px 30px rgba(0, 0, 0, 0.3)',
-      }}>
-        <p style={{
-          fontSize: '0.98rem',
-          lineHeight: '1.6',
-          color: 'var(--text-primary)',
-          fontWeight: '400',
-        }}>
-          "{lastResponse}"
-        </p>
-
-        {/* Live Subtitle Transcript (When Enabled) */}
-        {showTranscript && transcript && (
-          <div style={{
-            marginTop: '12px',
-            paddingTop: '12px',
-            borderTop: '1px solid var(--border-glass)',
-            fontSize: '0.84rem',
-            color: 'var(--calm-blue)',
-            fontStyle: 'italic',
-          }}>
-            You said: "{transcript}"
+          <div className="experience-panel__status-row">
+            <div className={`badge-emotion ${detectedEmotion}`}>
+              <HeartPulse size={12} />
+              <span>{formatLabel(detectedEmotion)} {Math.round(emotionConfidence * 100)}%</span>
+            </div>
+            <div className="experience-panel__status">
+              <ShieldCheck size={14} />
+              <span>Private session</span>
+            </div>
           </div>
-        )}
-      </div>
+        </div>
 
-      {/* Mic Control Button */}
-      <div style={{ marginTop: '24px', display: 'flex', gap: '12px' }}>
-        <button
-          onClick={onToggleMic}
-          className="btn-primary"
-          style={{
-            background: isMicOn
-              ? 'linear-gradient(135deg, #F5C6A5 0%, #F97316 100%)'
-              : 'linear-gradient(135deg, #6EC1E4 0%, #A8C6A5 100%)',
-            color: '#070B14',
-            padding: '12px 28px',
-            fontSize: '0.95rem',
-          }}
-        >
-          {isMicOn ? <MicOff size={18} /> : <Mic size={18} />}
-          <span>{isMicOn ? 'Pause Listening' : 'Start Voice Chat'}</span>
-        </button>
-      </div>
-      <p style={{ marginTop: '10px', fontSize: '0.76rem', color: 'var(--text-muted)', textAlign: 'center' }}>
-        You can pause, restart, or speak briefly at any time. Comfort matters more than perfect input.
-      </p>
+        <div className="voice-shell__main">
+          <div className="voice-shell__stage glass-panel">
+            <button type="button" className="voice-shell__orb-button" onClick={onToggleMic}>
+              <div className="orb-stage">
+                <div className="orb-ring" style={{ opacity: orbState === 'listening' ? 0.55 : 0.12 }} />
+                <div className="orb-ring" style={{ opacity: orbState === 'speaking' ? 0.5 : 0.12 }} />
+                <div className="orb-ring" style={{ opacity: orbState === 'thinking' ? 0.45 : 0.08 }} />
+                <div className={`orb-core ${orbState}`} />
+              </div>
+            </button>
 
-      {/* Quick Calming Prompt Chips */}
-      <div style={{
-        display: 'flex',
-        flexWrap: 'wrap',
-        justifyContent: 'center',
-        gap: '8px',
-        marginTop: '24px',
-      }}>
-        {[
-          'Feeling exhausted from continuous meetings',
-          'Guide me through a 2-minute calming breath',
-          'How is my emotional burnout trend looking?',
-          'Help me disconnect and wind down for the day',
-        ].map((prompt, i) => (
-          <button
-            key={i}
-            onClick={() => handleQuickPrompt(prompt)}
-            className="btn-ghost"
-            style={{ fontSize: '0.78rem', padding: '6px 14px' }}
-          >
-            <Sparkles size={12} color="var(--calm-blue)" />
-            {prompt}
+            <div className="voice-shell__state">
+              <div className="voice-shell__live">
+                <Radio size={13} />
+                <span>{isMicOn ? 'Microphone active' : 'Microphone paused'}</span>
+              </div>
+              <h4>{stateCopy.title}</h4>
+              <p>{stateCopy.body}</p>
+            </div>
+          </div>
+
+          <div className="voice-shell__cards">
+            <div className="combo-card combo-card--primary">
+              <span className="combo-card__label">MindGuard response</span>
+              <p>{lastResponse}</p>
+            </div>
+
+            {showTranscript && (
+              <div className="combo-card">
+                <span className="combo-card__label">Live transcript</span>
+                <p>{transcript ? `"${transcript}"` : 'Your latest spoken words will appear here.'}</p>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="voice-shell__actions">
+          <button type="button" onClick={onToggleMic} className="btn-primary">
+            {isMicOn ? <MicOff size={18} /> : <Mic size={18} />}
+            <span>{isMicOn ? 'Pause voice mode' : 'Start voice mode'}</span>
           </button>
-        ))}
+        </div>
+
+        <div className="chip-cloud">
+          {[
+            'Feeling exhausted from continuous meetings',
+            'Guide me through a 2-minute calming breath',
+            'How is my emotional burnout trend looking',
+            'Help me disconnect and wind down for the day',
+          ].map((prompt) => (
+            <button
+              key={prompt}
+              type="button"
+              onClick={() => handleQuickPrompt(prompt)}
+              className="btn-ghost"
+            >
+              <Sparkles size={12} color="var(--calm-blue)" />
+              {prompt}
+            </button>
+          ))}
+        </div>
       </div>
     </div>
   );
+}
+
+function getStateCopy(orbState, isMicOn) {
+  if (orbState === 'listening') {
+    return {
+      title: 'Listening now',
+      body: 'Speak naturally. Short pauses are okay and you do not need to explain everything at once.',
+    };
+  }
+
+  if (orbState === 'thinking') {
+    return {
+      title: 'Reflecting on your check-in',
+      body: 'MindGuard is turning your words into a calm, practical next step.',
+    };
+  }
+
+  if (orbState === 'speaking') {
+    return {
+      title: 'Responding gently',
+      body: 'The voice reply is playing now and will return to listening when it finishes.',
+    };
+  }
+
+  return {
+    title: isMicOn ? 'Ready when you are' : 'Voice mode is paused',
+    body: 'Start the microphone whenever talking feels easier than typing.',
+  };
+}
+
+function formatLabel(value) {
+  return (value || 'neutral')
+    .replace(/[-_]/g, ' ')
+    .replace(/\b\w/g, (character) => character.toUpperCase());
 }

@@ -34,8 +34,8 @@ export default function InsightsPanel({
     <aside className="insights-panel glass-panel">
       <div className="insights-panel__header">
         <div>
-          <span className="eyebrow">Recovery Snapshot</span>
-          <h3>Live wellness telemetry</h3>
+          <span className="eyebrow">Today At A Glance</span>
+          <h3>Your stress snapshot</h3>
         </div>
         <button type="button" className="btn-ghost" onClick={onRefresh} disabled={isLoading}>
           <RefreshCw size={14} className={isLoading ? 'spin' : ''} />
@@ -66,7 +66,7 @@ export default function InsightsPanel({
 
       <div className="insights-panel__timeline">
         <div className="insights-panel__timeline-header">
-          <span>Recent emotional rhythm</span>
+          <span>Recent patterns</span>
           <span>{moodHistory.length ? 'Latest first' : 'Waiting for check-ins'}</span>
         </div>
 

@@ -1,4 +1,3 @@
-// web/src/components/BurnoutRadar.jsx
 import React from 'react';
 import { X, HeartPulse, CheckCircle2, Moon, Coffee, Wind } from 'lucide-react';
 
@@ -12,207 +11,147 @@ export default function BurnoutRadar({
   if (!isOpen) return null;
 
   const weeklyTrends = buildWeeklyTrends(moodHistory);
-  const statusColor = burnoutScore >= 70 ? '#F87171' : burnoutScore >= 45 ? 'var(--pastel-peach)' : 'var(--sage-green)';
+  const statusColor = burnoutScore >= 70 ? '#ef4444' : burnoutScore >= 45 ? 'var(--pastel-peach-warm)' : 'var(--sage-green)';
   const recentEntries = moodHistory.slice(0, 5);
+  const actions = [
+    {
+      icon: Wind,
+      title: 'Box breathing',
+      body: 'Try four slow counts in, four hold, four out, and four at rest to lower tension quickly.',
+      tone: 'var(--calm-blue-deep)',
+    },
+    {
+      icon: Moon,
+      title: 'Evening wind-down',
+      body: 'Reduce screens before bed and use the lighter check-in modes when energy is already low.',
+      tone: 'var(--sage-green-deep)',
+    },
+    {
+      icon: Coffee,
+      title: 'Micro-break pacing',
+      body: 'A short walk, water, and one fewer task can be more effective than pushing harder.',
+      tone: '#af5f1f',
+    },
+  ];
 
   return (
-    <div style={{
-      position: 'fixed',
-      inset: 0,
-      background: 'rgba(7, 11, 20, 0.85)',
-      backdropFilter: 'blur(20px)',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      zIndex: 100,
-      padding: '20px',
-    }}>
-      <div className="glass-panel" style={{
-        width: '100%',
-        maxWidth: '780px',
-        maxHeight: '90vh',
-        overflowY: 'auto',
-        padding: '30px',
-        background: 'rgba(14, 22, 38, 0.95)',
-        border: '1px solid rgba(110, 193, 228, 0.25)',
-        boxShadow: '0 20px 60px rgba(0, 0, 0, 0.6)',
-        borderRadius: '24px',
-      }}>
-        {/* Header */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <div style={{
-              width: '42px',
-              height: '42px',
-              borderRadius: '12px',
-              background: 'rgba(110, 193, 228, 0.15)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              border: '1px solid rgba(110, 193, 228, 0.3)',
-            }}>
-              <HeartPulse size={22} color="var(--calm-blue)" />
+    <div className="modal-overlay">
+      <div className="modal-panel modal-panel--wide">
+        <div className="modal-panel__header">
+          <div className="modal-panel__title-group">
+            <div className="modal-panel__icon">
+              <HeartPulse size={22} color="var(--calm-blue-deep)" />
             </div>
             <div>
-              <h2 style={{ fontFamily: 'var(--font-heading)', fontSize: '1.35rem', fontWeight: '700' }}>
-                Burnout Risk & Emotional Velocity
-              </h2>
-              <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>
-                Longitudinal multimodal health analytics
-              </p>
+              <span className="eyebrow">Burnout Radar</span>
+              <h2>Your weekly recovery view</h2>
+              <p>See the recent pattern first, then take the smallest useful next step.</p>
             </div>
           </div>
-          <button onClick={onClose} className="btn-icon" style={{ width: '38px', height: '38px' }}>
+
+          <button type="button" onClick={onClose} className="btn-icon modal-panel__close">
             <X size={18} />
           </button>
         </div>
 
-        {/* Big Risk Index Meter */}
-        <div className="glass-card" style={{
-          padding: '24px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          marginBottom: '24px',
-          background: 'linear-gradient(135deg, rgba(168, 198, 165, 0.1) 0%, rgba(110, 193, 228, 0.1) 100%)',
-          border: '1px solid rgba(168, 198, 165, 0.3)',
-        }}>
+        <div className="radar-score-card glass-card">
           <div>
-            <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              Current Burnout Score
-            </span>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: '10px', marginTop: '4px' }}>
-              <span style={{ fontFamily: 'var(--font-heading)', fontSize: '2.8rem', fontWeight: '700', color: statusColor }}>
-                {burnoutScore}%
-              </span>
-              <span style={{ fontSize: '0.95rem', fontWeight: '600', color: 'var(--sage-green-light)' }}>
-                {burnoutSnapshot.level} Risk ({burnoutSnapshot.status})
-              </span>
+            <span className="radar-score-card__label">Current score</span>
+            <div className="radar-score-card__summary">
+              <strong style={{ color: statusColor }}>{burnoutScore}%</strong>
+              <span>{burnoutSnapshot.level} risk</span>
             </div>
-            <p style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', marginTop: '4px', maxWidth: '420px' }}>
-              Based on {moodHistory.length || 'live'} multimodal check-ins stored through the new Django API layer.
+            <p className="radar-score-card__body">
+              {burnoutSnapshot.status}. Based on {moodHistory.length || 'live'} recent check-ins across the app.
             </p>
           </div>
 
-          <div style={{
-            width: '90px',
-            height: '90px',
-            borderRadius: '50%',
-            border: `4px solid ${statusColor}`,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            boxShadow: `0 0 25px ${statusColor}40`,
-          }}>
+          <div className="radar-score-card__ring" style={{ borderColor: statusColor, color: statusColor }}>
             <CheckCircle2 size={38} color={statusColor} />
           </div>
         </div>
 
-        {/* 7-Day Velocity Chart */}
-        <div className="glass-card" style={{ padding: '22px', marginBottom: '24px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-            <span style={{ fontSize: '0.88rem', fontWeight: '600' }}>7-Day Emotional Velocity</span>
-            <div style={{ display: 'flex', gap: '14px', fontSize: '0.75rem' }}>
-              <span style={{ color: 'var(--sage-green)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                ● Calm / Flow
-              </span>
-              <span style={{ color: 'var(--pastel-peach)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                ● Stress / Fatigue
-              </span>
+        <div className="radar-section glass-card">
+          <div className="radar-section__header">
+            <h3>7-day emotional pattern</h3>
+            <div className="radar-legend">
+              <span className="radar-legend__item calm">Calm</span>
+              <span className="radar-legend__item stress">Stress</span>
             </div>
           </div>
 
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', height: '140px', gap: '12px', paddingTop: '10px' }}>
-            {weeklyTrends.map((t, idx) => (
-              <div key={idx} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
-                <div style={{ width: '100%', display: 'flex', flexDirection: 'column', height: '100px', justifyContent: 'flex-end', gap: '2px' }}>
-                  <div style={{
-                    height: `${t.stress}%`,
-                    background: 'var(--pastel-peach)',
-                    borderRadius: '4px 4px 0 0',
-                    opacity: 0.8,
-                  }} />
-                  <div style={{
-                    height: `${t.calm}%`,
-                    background: 'var(--sage-green)',
-                    borderRadius: '0 0 4px 4px',
-                    opacity: 0.9,
-                  }} />
+          <div className="radar-chart">
+            {weeklyTrends.map((trend) => (
+              <div key={trend.day} className="radar-chart__column">
+                <div className="radar-chart__track">
+                  <div className="radar-chart__segment stress" style={{ height: `${trend.stress}%` }} />
+                  <div className="radar-chart__segment calm" style={{ height: `${trend.calm}%` }} />
                 </div>
-                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{t.day}</span>
+                <span>{trend.day}</span>
               </div>
             ))}
           </div>
         </div>
 
-        <div style={{ marginBottom: '24px' }}>
-          <h3 style={{ fontFamily: 'var(--font-heading)', fontSize: '1rem', fontWeight: '600', marginBottom: '12px' }}>
-            Recent Logged Signals
-          </h3>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px' }}>
+        <div className="radar-grid">
+          <div className="radar-section glass-card">
+            <div className="radar-section__header">
+              <h3>Recent signals</h3>
+              <span>{recentEntries.length ? 'Latest first' : 'Waiting for data'}</span>
+            </div>
+
             {recentEntries.length ? (
               recentEntries.map((entry) => (
-                <div key={entry.id} className="glass-card" style={{ padding: '14px' }}>
-                  <div className={`badge-emotion ${entry.emotion}`} style={{ width: 'fit-content', marginBottom: '10px' }}>
-                    {entry.emotion}
+                <div key={entry.id} className="radar-entry">
+                  <div className={`badge-emotion ${entry.emotion}`}>
+                    {formatLabel(entry.emotion)}
                   </div>
-                  <p style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
-                    {entry.sourceMode} check-in
-                  </p>
-                  <p style={{ fontSize: '0.76rem', color: 'var(--text-muted)', marginTop: '4px' }}>
-                    {new Date(entry.timestamp).toLocaleString()}
-                  </p>
+                  <div>
+                    <strong>{formatLabel(entry.sourceMode)} check-in</strong>
+                    <p>{new Date(entry.timestamp).toLocaleString()}</p>
+                  </div>
                 </div>
               ))
             ) : (
-              <div className="glass-card" style={{ padding: '14px' }}>
-                <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
-                  No historical entries yet. Run a few text or voice check-ins to populate the radar.
-                </p>
+              <div className="radar-empty">
+                <p>No historical entries yet. Run a few short check-ins to populate the radar.</p>
               </div>
             )}
           </div>
-        </div>
 
-        <div>
-          <h3 style={{ fontFamily: 'var(--font-heading)', fontSize: '1rem', fontWeight: '600', marginBottom: '12px' }}>
-            Personalized Calming Actions
-          </h3>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '12px' }}>
-            <div className="glass-card" style={{ padding: '14px', display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
-              <Wind size={20} color="var(--calm-blue)" style={{ marginTop: '2px' }} />
-              <div>
-                <h4 style={{ fontSize: '0.85rem', fontWeight: '600' }}>Box Breathing</h4>
-                <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '2px' }}>
-                  4s in, 4s hold, 4s out, 4s pause. Lowers cortisol instantly.
-                </p>
-              </div>
+          <div className="radar-section glass-card">
+            <div className="radar-section__header">
+              <h3>Recovery ideas</h3>
+              <span>Keep it small</span>
             </div>
 
-            <div className="glass-card" style={{ padding: '14px', display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
-              <Moon size={20} color="var(--soft-lavender)" style={{ marginTop: '2px' }} />
-              <div>
-                <h4 style={{ fontSize: '0.85rem', fontWeight: '600' }}>Evening Wind-Down</h4>
-                <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '2px' }}>
-                  Shut down screens 45 minutes before sleep to restore REM balance.
-                </p>
-              </div>
-            </div>
-
-            <div className="glass-card" style={{ padding: '14px', display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
-              <Coffee size={20} color="var(--pastel-peach)" style={{ marginTop: '2px' }} />
-              <div>
-                <h4 style={{ fontSize: '0.85rem', fontWeight: '600' }}>Micro-Break Pacing</h4>
-                <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '2px' }}>
-                  Take a 3-minute hydration walk between focused work blocks.
-                </p>
-              </div>
+            <div className="radar-actions">
+              {actions.map((action) => {
+                const Icon = action.icon;
+                return (
+                  <div key={action.title} className="radar-action">
+                    <div className="radar-action__icon">
+                      <Icon size={18} color={action.tone} />
+                    </div>
+                    <div>
+                      <strong>{action.title}</strong>
+                      <p>{action.body}</p>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>
       </div>
     </div>
   );
+}
+
+function formatLabel(value) {
+  return (value || 'neutral')
+    .replace(/[-_]/g, ' ')
+    .replace(/\b\w/g, (character) => character.toUpperCase());
 }
 
 function buildWeeklyTrends(moodHistory) {
