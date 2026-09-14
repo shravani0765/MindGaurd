@@ -3,11 +3,31 @@ from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "mindguard-dev-secret-key")
-DEBUG = os.getenv("DEBUG", "true").lower() == "true"
+
+def env_str(name, default=""):
+    value = os.getenv(name)
+    if value is None:
+        return default
+    value = value.strip()
+    return value if value else default
+
+
+def env_bool(name, default=False):
+    return env_str(name, str(default)).lower() in {"1", "true", "yes", "on"}
+
+
+def env_int(name, default):
+    value = env_str(name, str(default))
+    try:
+        return int(value)
+    except ValueError:
+        return default
+
+SECRET_KEY = env_str("DJANGO_SECRET_KEY", "mindguard-dev-secret-key")
+DEBUG = env_bool("DEBUG", True)
 ALLOWED_HOSTS = [
     host.strip()
-    for host in os.getenv("ALLOWED_HOSTS", "127.0.0.1,localhost").split(",")
+    for host in env_str("ALLOWED_HOSTS", "127.0.0.1,localhost").split(",")
     if host.strip()
 ]
 
@@ -77,7 +97,7 @@ AUTH_PASSWORD_VALIDATORS = [
 ]
 
 LANGUAGE_CODE = "en-us"
-TIME_ZONE = os.getenv("APP_TIME_ZONE", "Asia/Kolkata")
+TIME_ZONE = env_str("APP_TIME_ZONE", "Asia/Kolkata")
 
 USE_I18N = True
 USE_TZ = True
@@ -85,11 +105,11 @@ USE_TZ = True
 STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 
-FRONTEND_URL = os.getenv("FRONTEND_URL", "http://127.0.0.1:5173")
+FRONTEND_URL = env_str("FRONTEND_URL", "http://127.0.0.1:5173")
 
 CORS_ALLOWED_ORIGINS = [
     origin.strip()
-    for origin in os.getenv(
+    for origin in env_str(
         "CORS_ALLOWED_ORIGINS",
         "http://127.0.0.1:5173,http://localhost:5173,http://127.0.0.1:3000,http://localhost:3000",
     ).split(",")
@@ -97,16 +117,16 @@ CORS_ALLOWED_ORIGINS = [
 ]
 CSRF_TRUSTED_ORIGINS = CORS_ALLOWED_ORIGINS
 
-EMAIL_BACKEND = os.getenv(
+EMAIL_BACKEND = env_str(
     "EMAIL_BACKEND",
     "django.core.mail.backends.console.EmailBackend",
 )
-EMAIL_HOST = os.getenv("EMAIL_HOST", "")
-EMAIL_PORT = int(os.getenv("EMAIL_PORT", "587"))
-EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "")
-EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
-EMAIL_USE_TLS = os.getenv("EMAIL_USE_TLS", "true").lower() == "true"
-DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "mindguard@localhost")
+EMAIL_HOST = env_str("EMAIL_HOST", "")
+EMAIL_PORT = env_int("EMAIL_PORT", 587)
+EMAIL_HOST_USER = env_str("EMAIL_HOST_USER", "")
+EMAIL_HOST_PASSWORD = env_str("EMAIL_HOST_PASSWORD", "")
+EMAIL_USE_TLS = env_bool("EMAIL_USE_TLS", True)
+DEFAULT_FROM_EMAIL = env_str("DEFAULT_FROM_EMAIL", "mindguard@localhost")
 
 REST_FRAMEWORK = {
     "DEFAULT_RENDERER_CLASSES": [
